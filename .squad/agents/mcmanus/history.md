@@ -52,3 +52,24 @@
 - Verify Range header support is functional for wavesurfer audio streaming
 - Execute full test suite post-Fenster integration
 - Performance testing with actual audio files
+
+## Managed Identity Refactor — 2026-04-07
+
+### What Changed
+- All 5 service files + config + requirements refactored from API key auth to `DefaultAzureCredential`
+- Sync credential (`azure.identity.DefaultAzureCredential`) used in `config.py` for the shared token helper and in `azure_stt_batch.py` for blob upload (runs via `asyncio.to_thread`)
+- Async credential (`azure.identity.aio.DefaultAzureCredential`) used in `aoai_transcribe.py` (via `get_bearer_token_provider`) and `voxtral_transcribe.py`
+- Every service checks if the legacy key env-var is set; if so, uses key-based auth as a fallback
+- `AZURE_STORAGE_ACCOUNT_NAME` added for managed-identity blob URL construction; `AZURE_STORAGE_CONNECTION_STRING` kept as fallback
+- Batch blob SAS generation uses user-delegation key when on managed identity, account key when using connection string fallback
+- `.env.example` and `ARCHITECTURE.md` updated to reflect managed identity as default with optional key fallbacks
+
+### Learnings
+- `DefaultAzureCredential` handles token caching internally — no manual TTL/refresh logic needed
+- The `openai` SDK's `azure_ad_token_provider` expects a callable, not a raw token; `get_bearer_token_provider` from `azure.identity.aio` provides exactly that
+- `azure-ai-inference` `ChatCompletionsClient` accepts either `AzureKeyCredential` or `TokenCredential` — `DefaultAzureCredential` satisfies the latter
+- Blob SAS via managed identity requires `get_user_delegation_key()` + `user_delegation_key` param in `generate_blob_sas()` — no `account_key` available
+- Python 3.11 and 3.12 co-exist on this machine; pip installs into 3.11 site-packages — must use `python3.11` to run
+- **Settings singleton vs monkeypatch.setenv**: `backend.config.settings` is created at import time. `monkeypatch.setenv()` only changes `os.environ` — it does NOT affect the already-initialized pydantic-settings object. Must use `monkeypatch.setattr("backend.config.settings.<field>", value)` to patch settings in tests.
+- **DefaultAzureCredential hangs in tests**: If settings fields are empty (the defaults), services take the managed identity auth path and `DefaultAzureCredential()` hangs trying to probe IMDS / Azure CLI. The fix is twofold: (1) set fake API keys on settings so the key-based path is always taken, and (2) mock `DefaultAzureCredential` and `get_cognitive_services_token` as a safety net.
+- **Autouse conftest fixture for credential safety**: Added `_block_azure_credentials` autouse fixture in `tests/conftest.py` that sets fake keys on all settings fields and mocks credential helpers. Every test gets this automatically — individual `mock_env` fixtures can override specific values.

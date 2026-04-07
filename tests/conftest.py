@@ -24,6 +24,52 @@ import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
+
+# ---------------------------------------------------------------------------
+# Global safety net — prevent DefaultAzureCredential from real auth
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def _block_azure_credentials(monkeypatch):
+    """Ensure no test accidentally triggers real Azure authentication.
+
+    Sets fake API keys on the settings singleton so every service takes the
+    key-based auth path.  Also mocks DefaultAzureCredential and the shared
+    token helper as a belt-and-suspenders safety net.
+    """
+    try:
+        from backend import config
+
+        # Fake keys → services always take the key/connection-string path
+        monkeypatch.setattr(config.settings, "azure_speech_key", "fake-test-key")
+        monkeypatch.setattr(config.settings, "azure_speech_region", "eastus")
+        monkeypatch.setattr(
+            config.settings,
+            "azure_storage_connection_string",
+            "DefaultEndpointsProtocol=https;AccountName=faketest;AccountKey=ZmFrZWtleQ==;",
+        )
+        monkeypatch.setattr(config.settings, "azure_storage_container_name", "test-container")
+        monkeypatch.setattr(config.settings, "azure_openai_api_key", "fake-test-key")
+        monkeypatch.setattr(config.settings, "azure_openai_endpoint", "https://fake.openai.azure.com/")
+        monkeypatch.setattr(config.settings, "azure_openai_deployment_name", "gpt-4o-transcribe")
+        monkeypatch.setattr(config.settings, "voxtral_endpoint_key", "fake-test-key")
+        monkeypatch.setattr(config.settings, "voxtral_endpoint_url", "https://fake.voxtral.endpoint/")
+
+        # Safety net: mock the shared token helper so it never creates a credential
+        monkeypatch.setattr(config, "get_cognitive_services_token", lambda: "fake-token")
+
+        # Safety net: mock DefaultAzureCredential in service modules
+        mock_cred = MagicMock()
+        mock_cred.get_token.return_value = MagicMock(token="fake-token", expires_on=9999999999)
+        try:
+            import backend.services.azure_stt_batch as _batch_mod
+            monkeypatch.setattr(_batch_mod, "DefaultAzureCredential", lambda: mock_cred)
+        except (ImportError, AttributeError):
+            pass
+    except ImportError:
+        pass
+
 # ---------------------------------------------------------------------------
 # Schema stubs — used ONLY until the real backend models exist.
 # These mirror the contract in ARCHITECTURE.md so tests can reference the

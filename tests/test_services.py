@@ -191,8 +191,8 @@ class TestAzureSTTFastService:
 
     @pytest.fixture
     def mock_env(self, monkeypatch):
-        monkeypatch.setenv("AZURE_SPEECH_KEY", "fake-key")
-        monkeypatch.setenv("AZURE_SPEECH_REGION", "eastus")
+        monkeypatch.setattr("backend.config.settings.azure_speech_key", "fake-key")
+        monkeypatch.setattr("backend.config.settings.azure_speech_region", "eastus")
 
     async def test_transcribe_returns_result(self, mock_env):
         """Mocked HTTP call should produce a TranscriptionResult."""
@@ -279,10 +279,13 @@ class TestAzureSTTBatchService:
 
     @pytest.fixture
     def mock_env(self, monkeypatch):
-        monkeypatch.setenv("AZURE_SPEECH_KEY", "fake-key")
-        monkeypatch.setenv("AZURE_SPEECH_REGION", "eastus")
-        monkeypatch.setenv("AZURE_STORAGE_CONNECTION_STRING", "DefaultEndpointsProtocol=https;AccountName=fake;AccountKey=fake;")
-        monkeypatch.setenv("AZURE_STORAGE_CONTAINER_NAME", "test-container")
+        monkeypatch.setattr("backend.config.settings.azure_speech_key", "fake-key")
+        monkeypatch.setattr("backend.config.settings.azure_speech_region", "eastus")
+        monkeypatch.setattr(
+            "backend.config.settings.azure_storage_connection_string",
+            "DefaultEndpointsProtocol=https;AccountName=fake;AccountKey=ZmFrZWtleQ==;",
+        )
+        monkeypatch.setattr("backend.config.settings.azure_storage_container_name", "test-container")
 
     async def test_transcribe_returns_result(self, mock_env):
         try:
@@ -408,8 +411,8 @@ class TestMAITranscribeService:
 
     @pytest.fixture
     def mock_env(self, monkeypatch):
-        monkeypatch.setenv("AZURE_SPEECH_KEY", "fake-key")
-        monkeypatch.setenv("AZURE_SPEECH_REGION", "eastus")
+        monkeypatch.setattr("backend.config.settings.azure_speech_key", "fake-key")
+        monkeypatch.setattr("backend.config.settings.azure_speech_region", "eastus")
 
     async def test_transcribe_uses_enhanced_mode(self, mock_env):
         try:
@@ -460,9 +463,9 @@ class TestAOAITranscribeService:
 
     @pytest.fixture
     def mock_env(self, monkeypatch):
-        monkeypatch.setenv("AZURE_OPENAI_API_KEY", "fake-key")
-        monkeypatch.setenv("AZURE_OPENAI_ENDPOINT", "https://fake.openai.azure.com/")
-        monkeypatch.setenv("AZURE_OPENAI_DEPLOYMENT_NAME", "gpt-4o-transcribe")
+        monkeypatch.setattr("backend.config.settings.azure_openai_api_key", "fake-key")
+        monkeypatch.setattr("backend.config.settings.azure_openai_endpoint", "https://fake.openai.azure.com/")
+        monkeypatch.setattr("backend.config.settings.azure_openai_deployment_name", "gpt-4o-transcribe")
 
     async def test_transcribe_returns_segments(self, mock_env):
         try:
@@ -526,8 +529,8 @@ class TestVoxtralTranscribeService:
 
     @pytest.fixture
     def mock_env(self, monkeypatch):
-        monkeypatch.setenv("VOXTRAL_ENDPOINT_URL", "https://fake.voxtral.endpoint/")
-        monkeypatch.setenv("VOXTRAL_ENDPOINT_KEY", "fake-key")
+        monkeypatch.setattr("backend.config.settings.voxtral_endpoint_url", "https://fake.voxtral.endpoint/")
+        monkeypatch.setattr("backend.config.settings.voxtral_endpoint_key", "fake-key")
 
     async def test_transcribe_returns_result(self, mock_env):
         try:
