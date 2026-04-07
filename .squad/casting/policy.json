@@ -1,0 +1,21 @@
+{
+  "format_version": 1,
+  "universes": [
+    "usual-suspects",
+    "alien",
+    "blade-runner",
+    "matrix",
+    "star-wars-ot",
+    "lotr",
+    "dune",
+    "firefly",
+    "mad-max",
+    "terminator",
+    "back-to-future",
+    "ghostbusters",
+    "indiana-jones",
+    "jurassic-park",
+    "die-hard"
+  ],
+  "max_capacity_per_universe": 25
+}
