@@ -100,3 +100,23 @@
 
 ### Final result
 **67 passed, 21 skipped, 0 failed, 0 errors** — all skips are graceful (utility functions not yet in backend)
+
+### Verification — 2026-04-07 (re-check)
+- Re-ran full suite: **67 passed, 21 skipped, 0 failed** — confirmed stable
+- All 9 originally-described failures pass green: MP3 upload, async context manager mocks, Voxtral SDK, 422 validation, empty methods, job completion
+- **Lesson:** Always run the test suite before making changes — the baseline may have shifted since the task was filed
+
+## Managed Identity Refactor — 2026-04-07T17:11:42Z
+
+### Context
+McManus refactored all 5 Azure services from hardcoded API keys/connection strings to `DefaultAzureCredential` with managed identity support.
+
+### Test Pattern Changes
+- **Header mocks now mock bearer tokens:** Services no longer use `Ocp-Apim-Subscription-Key` header. Tests must mock token-provider patterns or credential fallback paths.
+- **Credential fallback:** Each service checks for legacy key env-var first. Tests can mock either the managed identity path or set the legacy key env-var to trigger fallback.
+- **Fixture strategy:** Conftest now uses `monkeypatch.setattr` on `settings` singleton with global autouse fixture mocking `DefaultAzureCredential` globally.
+
+### Integration Status
+- **Backend:** All services now support managed identity + key fallback
+- **Tests:** 67 passed, 21 skipped, 0 failed — suite remains stable
+- **Test patterns established:** Bearer token mocking, credential fallback validation patterns ready for frontend integration testing
