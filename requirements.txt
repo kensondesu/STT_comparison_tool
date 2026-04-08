@@ -1,0 +1,27 @@
+# MAI_transcribe — Python Backend Dependencies
+
+# Web framework
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+python-multipart>=0.0.12       # Required for file uploads in FastAPI
+
+# Azure Identity (managed identity / DefaultAzureCredential for all services)
+azure-identity>=1.19.0
+
+# Azure Speech Services (Batch, Fast, MAI-Transcribe-1)
+aiohttp>=3.10.0                # Async HTTP for Azure REST APIs
+azure-storage-blob>=12.23.0    # Blob storage for batch transcription input
+
+# Azure OpenAI (gpt-4o-transcribe)
+openai>=1.55.0                 # OpenAI SDK with Azure support
+
+# Voxtral Mini (Azure Foundry)
+azure-ai-inference>=1.0.0b7    # Azure AI Inference SDK for Foundry endpoints
+
+# Audio processing
+mutagen>=1.47.0                # Audio metadata (duration, format detection)
+
+# Utilities
+python-dotenv>=1.0.1           # Load .env files
+pydantic>=2.10.0               # Data validation (bundled with FastAPI, pinned for clarity)
+pydantic-settings>=2.6.0       # Settings management from env vars

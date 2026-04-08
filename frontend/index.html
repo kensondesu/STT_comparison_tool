@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>STT Comparison Tool — Audio Transcription Comparison</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+
+    <!-- Header -->
+    <header class="app-header">
+        <h1><span class="logo">🎙</span> STT Comparison Tool</h1>
+        <button id="theme-toggle" class="theme-btn" title="Toggle dark/light theme">🌙</button>
+    </header>
+
+    <main>
+
+        <!-- Upload + Settings -->
+        <section class="upload-section">
+
+            <!-- Drop zone -->
+            <div>
+                <div id="drop-zone" class="drop-zone">
+                    <div class="drop-icon">📁</div>
+                    <strong>Drop an audio file here</strong>
+                    <p>or click to browse</p>
+                    <div class="formats">wav · mp3 · flac · ogg · m4a · webm</div>
+                </div>
+                <input type="file" id="file-input" class="hidden"
+                       accept=".wav,.mp3,.flac,.ogg,.m4a,.webm,audio/*">
+                <div id="file-info"></div>
+            </div>
+
+            <!-- Settings -->
+            <div class="settings-panel">
+                <h2>⚙ Settings</h2>
+
+                <div class="form-group">
+                    <label for="language-select">Language</label>
+                    <select id="language-select"></select>
+                </div>
+
+                <div class="form-group">
+                    <label>Transcription methods</label>
+                    <div id="method-checks" class="methods-list"></div>
+                </div>
+
+                <button id="transcribe-btn" class="transcribe-btn" disabled>
+                    🚀 Transcribe
+                </button>
+            </div>
+
+        </section>
+
+        <!-- Status -->
+        <section id="status-section" class="status-section">
+            <div id="status-text" class="status-text"></div>
+            <div class="progress-track">
+                <div id="progress-bar" class="progress-fill"></div>
+            </div>
+        </section>
+
+        <!-- Audio player -->
+        <section id="player-section" class="player-section">
+            <h2>🔊 Audio Player</h2>
+            <div id="waveform"></div>
+            <div class="player-controls">
+                <button id="play-btn" class="play-btn">▶ Play</button>
+                <span id="time-display" class="time-display">0:00 / 0:00</span>
+            </div>
+        </section>
+
+        <!-- Results -->
+        <section id="results-section" class="results-section">
+            <h2>📊 Transcription Results</h2>
+            <div id="results-grid" class="results-grid"></div>
+        </section>
+
+    </main>
+
+    <footer class="app-footer">
+        MAI Transcribe PoC — Audio transcription comparison tool
+    </footer>
+
+    <script type="module" src="js/app.js"></script>
+</body>
+</html>

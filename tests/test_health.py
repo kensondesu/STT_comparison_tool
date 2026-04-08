@@ -63,7 +63,13 @@ async def test_health_unconfigured_without_env(client, monkeypatch):
     """With no Azure/OpenAI keys, services should report 'not_configured'."""
     # Clear settings attributes directly (env vars don't affect the singleton)
     monkeypatch.setattr("backend.config.settings.azure_speech_key", "")
+    monkeypatch.setattr("backend.config.settings.azure_speech_region", "")
+    monkeypatch.setattr("backend.config.settings.azure_speech_endpoint", "")
     monkeypatch.setattr("backend.config.settings.azure_storage_connection_string", "")
+    monkeypatch.setattr("backend.config.settings.azure_storage_account_name", "")
+    monkeypatch.setattr("backend.config.settings.mai_speech_key", "")
+    monkeypatch.setattr("backend.config.settings.mai_speech_region", "")
+    monkeypatch.setattr("backend.config.settings.mai_speech_endpoint", "")
     monkeypatch.setattr("backend.config.settings.azure_openai_api_key", "")
     monkeypatch.setattr("backend.config.settings.azure_openai_endpoint", "")
     monkeypatch.setattr("backend.config.settings.voxtral_endpoint_url", "")

@@ -1,0 +1,25 @@
+# Squad: ignore runtime state (logs, inbox, sessions)
+.squad/orchestration-log/
+.squad/log/
+.squad/decisions/inbox/
+.squad/sessions/
+# Squad: SubSquad activation file (local to this machine)
+.squad-workstream
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Environment
+.env
+
+# Uploads (audio files)
+uploads/*
+!uploads/.gitkeep
+.copilot/
+=1.19.0
+*.swp
+.pytest_cache/

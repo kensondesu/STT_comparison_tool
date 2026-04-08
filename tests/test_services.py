@@ -62,41 +62,41 @@ class TestBaseServiceInterface:
 
 
 class TestTimecodeNormalization:
-    """Azure STT returns offsets in 100-nanosecond ticks. Verify conversion."""
+    """Azure STT Fast API returns offsets in milliseconds. Verify conversion."""
 
-    def _ticks_to_seconds(self, ticks: int) -> float:
-        """The normalization formula used throughout the Azure STT services."""
-        return ticks / 10_000_000
+    def _ms_to_seconds(self, ms: int) -> float:
+        """The normalization formula used in the Fast/MAI services."""
+        return ms / 1000.0
 
-    def test_zero_ticks(self):
-        assert self._ticks_to_seconds(0) == 0.0
+    def test_zero_ms(self):
+        assert self._ms_to_seconds(0) == 0.0
 
     def test_one_second(self):
-        assert self._ticks_to_seconds(10_000_000) == 1.0
+        assert self._ms_to_seconds(1000) == 1.0
 
     def test_fractional_seconds(self):
-        result = self._ticks_to_seconds(25_400_000)
+        result = self._ms_to_seconds(2540)
         assert abs(result - 2.54) < 1e-6
 
     def test_large_offset(self):
-        # 2 hours in ticks
-        two_hours_ticks = 2 * 3600 * 10_000_000
-        assert self._ticks_to_seconds(two_hours_ticks) == 7200.0
+        two_hours_ms = 2 * 3600 * 1000
+        assert self._ms_to_seconds(two_hours_ms) == 7200.0
 
     def test_small_offset(self):
-        # 100ms
-        result = self._ticks_to_seconds(1_000_000)
+        result = self._ms_to_seconds(100)
         assert abs(result - 0.1) < 1e-6
 
-    def test_normalization_in_azure_stt_fast_service(self):
-        """If the service exposes a normalization helper, test it directly."""
+    def test_normalization_in_parse_result(self):
+        """Test _parse_result handles millisecond fields correctly."""
         try:
             from backend.services.azure_stt_fast import AzureSttFastService
-            svc = AzureSttFastService.__new__(AzureSttFastService)
-            if hasattr(svc, "_ticks_to_seconds"):
-                assert svc._ticks_to_seconds(10_000_000) == 1.0
-                assert abs(svc._ticks_to_seconds(25_400_000) - 2.54) < 1e-6
-        except (ImportError, AttributeError):
+            result = AzureSttFastService._parse_result({
+                "combinedPhrases": [{"text": "Hello."}],
+                "phrases": [{"offsetMilliseconds": 1500, "durationMilliseconds": 2000, "text": "Hello.", "locale": "en-US"}],
+            })
+            assert result.segments[0].start_time == 1.5
+            assert result.segments[0].end_time == 3.5
+        except ImportError:
             pytest.skip("AzureSttFastService not yet implemented")
 
 
@@ -207,8 +207,8 @@ class TestAzureSTTFastService:
             "combinedPhrases": [{"text": "Hello world."}],
             "phrases": [
                 {
-                    "offsetInTicks": 0,
-                    "durationInTicks": 25_400_000,
+                    "offsetMilliseconds": 0,
+                    "durationMilliseconds": 2540,
                     "text": "Hello world.",
                 }
             ],
@@ -329,8 +329,8 @@ class TestAzureSTTBatchService:
             "combinedRecognizedPhrases": [{"display": "Hello from batch."}],
             "recognizedPhrases": [
                 {
-                    "offsetInTicks": 0,
-                    "durationInTicks": 30_000_000,
+                    "offsetMilliseconds": 0,
+                    "durationMilliseconds": 3000,
                     "nBest": [{"display": "Hello from batch."}],
                 }
             ],
@@ -426,8 +426,8 @@ class TestMAITranscribeService:
             "combinedPhrases": [{"text": "MAI result."}],
             "phrases": [
                 {
-                    "offsetInTicks": 0,
-                    "durationInTicks": 15_000_000,
+                    "offsetMilliseconds": 0,
+                    "durationMilliseconds": 1500,
                     "text": "MAI result.",
                 }
             ],
@@ -486,7 +486,8 @@ class TestAOAITranscribeService:
         import io
         fake_file = io.BytesIO(b"fake audio data")
         with patch("backend.services.aoai_transcribe.AsyncAzureOpenAI", return_value=mock_client), \
-             patch("builtins.open", return_value=fake_file):
+             patch("builtins.open", return_value=fake_file), \
+             patch("backend.utils.audio.get_duration", return_value=2.0):
             svc = AoaiTranscribeService()
             result = await svc.transcribe("fake/path.wav", language="en-US")
 
