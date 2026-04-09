@@ -39,18 +39,41 @@ class LlmSpeechService(TranscriptionService):
         self._url = f"{base}/speechtotext/transcriptions:transcribe?api-version=2025-10-15"
 
     @staticmethod
-    def _build_definition() -> dict:
-        return {
-            "enhancedMode": {
-                "enabled": True,
-                "task": "transcribe",
-            },
+    def _build_definition(settings: dict | None = None) -> dict:
+        s = settings or {}
+        enhanced_mode: dict = {
+            "enabled": True,
+            "task": s.get("task", "transcribe"),
         }
 
+        # Prompt hints
+        if "prompt" in s:
+            enhanced_mode["prompt"] = s["prompt"]
+
+        # Target language (for translate task)
+        if "target_language" in s:
+            enhanced_mode["targetLanguage"] = s["target_language"]
+
+        definition: dict = {"enhancedMode": enhanced_mode}
+
+        # Diarization
+        if s.get("diarization_enabled"):
+            max_speakers = s.get("diarization_max_speakers", 4)
+            definition["diarization"] = {
+                "maxSpeakers": max_speakers,
+                "enabled": True,
+            }
+
+        # Profanity filter
+        if "profanity_filter" in s:
+            definition["profanityFilterMode"] = s["profanity_filter"]
+
+        return definition
+
     async def transcribe(
-        self, audio_path: str, language: str | None = None
+        self, audio_path: str, language: str | None = None, settings: dict | None = None
     ) -> TranscriptionResult:
-        definition = self._build_definition()
+        definition = self._build_definition(settings)
         file_path = Path(audio_path)
 
         data = aiohttp.FormData()

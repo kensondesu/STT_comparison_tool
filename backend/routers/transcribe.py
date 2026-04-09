@@ -65,14 +65,15 @@ def _compute_job_status(methods: dict[str, JobStatusValue]) -> JobStatusValue:
 
 
 async def _run_method(
-    job_id: str, method: str, audio_path: str, language: str | None
+    job_id: str, method: str, audio_path: str, language: str | None,
+    method_settings: dict | None = None,
 ) -> None:
     """Execute a single transcription method and store the result."""
     service = SERVICE_MAP[method]()
     start = time.monotonic()
     try:
         result = await asyncio.wait_for(
-            service.transcribe(audio_path, language),
+            service.transcribe(audio_path, language, settings=method_settings),
             timeout=settings.method_timeout_seconds,
         )
         elapsed = round(time.monotonic() - start, 2)
@@ -134,9 +135,11 @@ async def start_transcription(request: TranscribeRequest):
     _jobs[job_id] = job
     _results[job_id] = {}
 
+    ms = request.method_settings or {}
     for m in request.methods:
         asyncio.create_task(
-            _run_method(job_id, m.value, str(audio_path), request.language)
+            _run_method(job_id, m.value, str(audio_path), request.language,
+                        method_settings=ms.get(m.value))
         )
 
     return job

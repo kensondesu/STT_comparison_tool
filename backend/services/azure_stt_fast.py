@@ -32,10 +32,37 @@ class AzureSttFastService(TranscriptionService):
         base = settings.azure_speech_endpoint.rstrip("/") if settings.azure_speech_endpoint else f"https://{self._region}.api.cognitive.microsoft.com"
         self._url = f"{base}/speechtotext/transcriptions:transcribe?api-version=2025-10-15"
 
-    def _build_definition(self, language: str | None) -> dict:
+    def _build_definition(self, language: str | None, settings: dict | None = None) -> dict:
+        s = settings or {}
         definition: dict = {}
-        if language:
+
+        # Phrase list
+        if "phrase_list" in s:
+            definition["phraseList"] = s["phrase_list"]
+
+        # Profanity filter
+        if "profanity_filter" in s:
+            definition["profanityFilterMode"] = s["profanity_filter"]
+
+        # Diarization
+        if s.get("diarization_enabled"):
+            max_speakers = s.get("diarization_max_speakers", 4)
+            definition["diarization"] = {
+                "speakers": {"minCount": 1, "maxCount": max_speakers}
+            }
+
+        # Language / auto-detect
+        language_autodetect = s.get("language_autodetect", True)
+        if language and not language_autodetect:
             definition["locales"] = [language]
+        elif language:
+            definition["locales"] = [language]
+            definition["languageIdentification"] = {
+                "candidateLocales": [
+                    "en-US", "fr-FR", "de-DE", "es-ES", "ja-JP",
+                    "zh-CN", "ko-KR", "pt-BR", "it-IT", "nl-NL",
+                ]
+            }
         else:
             definition["locales"] = ["en-US"]
             definition["languageIdentification"] = {
@@ -47,9 +74,9 @@ class AzureSttFastService(TranscriptionService):
         return definition
 
     async def transcribe(
-        self, audio_path: str, language: str | None = None
+        self, audio_path: str, language: str | None = None, settings: dict | None = None
     ) -> TranscriptionResult:
-        definition = self._build_definition(language)
+        definition = self._build_definition(language, settings)
         file_path = Path(audio_path)
 
         data = aiohttp.FormData()

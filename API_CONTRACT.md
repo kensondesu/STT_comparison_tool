@@ -88,6 +88,7 @@ Start transcription of an uploaded file using one or more methods.
 | `file_id` | `string` (UUID) | Yes | ID returned from upload |
 | `methods` | `string[]` | Yes | Which transcription engines to use. At least one required. |
 | `language` | `string \| null` | No | BCP-47 language code (e.g., `"en-US"`, `"fr-FR"`, `"ja-JP"`). If omitted or `null`, services will attempt auto-detection. |
+| `method_settings` | `object \| null` | No | Per-method custom settings. Keys are method identifiers, values are setting objects. See [Method Settings](#method-settings). |
 
 **Valid method identifiers:**
 - `azure_stt_batch` — Azure STT Batch Transcription
@@ -402,6 +403,92 @@ Stream the uploaded audio file to the frontend for playback.
 | `voxtral` | Voxtral Mini via Azure Foundry |
 | `whisper` | Azure OpenAI Whisper |
 | `llm_speech` | LLM Speech (Azure Fast Transcription enhanced mode) |
+
+---
+
+## Method Settings
+
+The optional `method_settings` field in `POST /api/transcribe` allows passing per-method configuration. Keys are method identifiers; values are objects with method-specific parameters. Unknown keys are silently ignored. When `method_settings` is omitted or `null`, all methods use their defaults.
+
+**Example request:**
+```json
+{
+  "file_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "methods": ["azure_stt_fast", "whisper"],
+  "language": "en-US",
+  "method_settings": {
+    "azure_stt_fast": {
+      "phrase_list": ["Contoso", "Azure"],
+      "diarization_enabled": true,
+      "diarization_max_speakers": 4,
+      "profanity_filter": "Masked",
+      "language_autodetect": true
+    },
+    "whisper": {
+      "prompt": "Technical meeting about Azure cloud services",
+      "temperature": 0.2
+    }
+  }
+}
+```
+
+### Settings per Method
+
+#### `azure_stt_fast`
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `phrase_list` | `string[]` | — | Custom phrases/vocabulary to boost recognition accuracy |
+| `profanity_filter` | `string` | `None` | Profanity filter mode: `"None"`, `"Masked"`, `"Removed"`, `"Tags"` |
+| `diarization_enabled` | `bool` | `false` | Enable speaker diarization |
+| `diarization_max_speakers` | `int` | `4` | Maximum number of speakers (used when diarization is enabled) |
+| `language_autodetect` | `bool` | `true` | When `false` and `language` is set, disables language auto-detection |
+
+#### `azure_stt_batch`
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `profanity_filter` | `string` | `"None"` | Profanity filter mode: `"None"`, `"Masked"`, `"Removed"`, `"Tags"` |
+| `word_level_timestamps` | `bool` | `false` | Enable word-level timestamp output |
+
+#### `mai_transcribe`
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `profanity_filter` | `string` | — | Profanity filter mode: `"None"`, `"Masked"`, `"Removed"`, `"Tags"` |
+
+#### `llm_speech`
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `prompt` | `list[str]` | — | Prompt hints for the enhanced mode |
+| `task` | `string` | `"transcribe"` | Task type: `"transcribe"` or `"translate"` |
+| `target_language` | `string` | — | Target language code (only for `"translate"` task) |
+| `diarization_enabled` | `bool` | `false` | Enable speaker diarization |
+| `diarization_max_speakers` | `int` | `4` | Maximum number of speakers |
+| `profanity_filter` | `string` | — | Profanity filter mode: `"None"`, `"Masked"`, `"Removed"`, `"Tags"` |
+
+#### `whisper`
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `prompt` | `string` | — | Vocabulary hints for the model (guide style/spelling) |
+| `temperature` | `float` | — | Sampling temperature (0.0–1.0). Lower = more deterministic |
+
+#### `aoai_transcribe`
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `prompt` | `string` | — | Vocabulary hints for the model |
+| `temperature` | `float` | — | Sampling temperature (0.0–1.0) |
+
+#### `voxtral`
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `system_prompt` | `string` | *(built-in)* | Replace the default system prompt entirely |
+| `temperature` | `float` | — | Sampling temperature for generation |
+| `max_tokens` | `int` | — | Maximum tokens in the response |
 
 ---
 

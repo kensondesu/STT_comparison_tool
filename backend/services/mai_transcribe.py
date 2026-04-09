@@ -32,10 +32,16 @@ class MaiTranscribeService(TranscriptionService):
         base = settings.mai_speech_endpoint.rstrip("/") if settings.mai_speech_endpoint else f"https://{self._region}.api.cognitive.microsoft.com"
         self._url = f"{base}/speechtotext/transcriptions:transcribe?api-version=2025-10-15"
 
-    def _build_definition(self, language: str | None) -> dict:
+    def _build_definition(self, language: str | None, settings: dict | None = None) -> dict:
+        s = settings or {}
         definition: dict = {
             "enhancedMode": {"enabled": True, "model": "mai-transcribe-1"},
         }
+
+        # Profanity filter
+        if "profanity_filter" in s:
+            definition["profanityFilterMode"] = s["profanity_filter"]
+
         if language:
             definition["locales"] = [language]
         else:
@@ -49,9 +55,9 @@ class MaiTranscribeService(TranscriptionService):
         return definition
 
     async def transcribe(
-        self, audio_path: str, language: str | None = None
+        self, audio_path: str, language: str | None = None, settings: dict | None = None
     ) -> TranscriptionResult:
-        definition = self._build_definition(language)
+        definition = self._build_definition(language, settings)
         file_path = Path(audio_path)
 
         data = aiohttp.FormData()

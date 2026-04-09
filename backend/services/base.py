@@ -19,6 +19,6 @@ class TranscriptionService(ABC):
 
     @abstractmethod
     async def transcribe(
-        self, audio_path: str, language: str | None = None
+        self, audio_path: str, language: str | None = None, settings: dict | None = None
     ) -> TranscriptionResult:
         """Run transcription and return normalized segments with timecodes."""

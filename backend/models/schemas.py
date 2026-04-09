@@ -35,6 +35,7 @@ class TranscribeRequest(BaseModel):
     file_id: str
     methods: list[MethodName]
     language: str | None = None
+    method_settings: dict[str, dict] | None = None
 
 
 # --- Response models ---

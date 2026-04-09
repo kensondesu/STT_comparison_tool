@@ -91,3 +91,27 @@
 - **LLM Speech vs MAI-Transcribe-1**: Both use enhancedMode on Fast Transcription endpoint. LLM Speech uses `"task": "transcribe"` (no model specified); MAI uses `"model": "mai-transcribe-1"`. LLM Speech skips `locales` entirely — language detection is automatic.
 - **Parser reuse pattern holds**: LLM Speech reuses `AzureSttFastService._parse_result()` just like MAI-Transcribe-1 — same response format.
 - **Test brittleness**: Health test hardcoded service count; invalid-method test used a method name that later became valid. Both needed updating when adding new services.
+
+## Per-Model Custom Settings — 2026-04-10
+
+### What Changed
+- Added `method_settings: dict[str, dict] | None = None` to `TranscribeRequest` schema
+- Updated `TranscriptionService.transcribe()` base signature to accept `settings: dict | None = None`
+- Router passes per-method settings from `method_settings.get(method_name)` to each service
+- All 7 services updated to read relevant keys from `settings` dict via `.get()` — unknown keys silently ignored
+- `API_CONTRACT.md` updated with full "Method Settings" reference section
+
+### Settings per Service
+- **azure_stt_fast**: `phrase_list`, `profanity_filter`, `diarization_enabled`/`diarization_max_speakers`, `language_autodetect`
+- **azure_stt_batch**: `profanity_filter`, `word_level_timestamps`
+- **mai_transcribe**: `profanity_filter`
+- **llm_speech**: `prompt`, `task`, `target_language`, `diarization_enabled`/`diarization_max_speakers`, `profanity_filter`
+- **whisper**: `prompt`, `temperature`
+- **aoai_transcribe**: `prompt`, `temperature`
+- **voxtral**: `system_prompt`, `temperature`, `max_tokens`
+
+### Learnings
+- **Backward compatibility preserved**: `settings` defaults to `None`, treated as empty dict inside each service. Zero behavior change when no settings passed.
+- **Router plumbing is minimal**: One new kwarg on `_run_method()` + a `.get()` call per task dispatch. Clean separation between routing and service logic.
+- **Settings dict over typed model**: Using `dict` instead of per-method Pydantic models keeps the interface uniform and avoids schema explosion. Services are responsible for validating their own keys.
+- All 81 tests pass with no changes needed — the settings parameter is fully additive.

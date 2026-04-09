@@ -46,8 +46,9 @@ class WhisperTranscribeService(TranscriptionService):
         self._deployment = settings.azure_whisper_deployment_name
 
     async def transcribe(
-        self, audio_path: str, language: str | None = None
+        self, audio_path: str, language: str | None = None, settings: dict | None = None
     ) -> TranscriptionResult:
+        s = settings or {}
         with open(audio_path, "rb") as audio_file:
             kwargs: dict = {
                 "model": self._deployment,
@@ -57,6 +58,12 @@ class WhisperTranscribeService(TranscriptionService):
             }
             if language:
                 kwargs["language"] = language.split("-")[0]  # ISO-639-1
+
+            # Custom settings
+            if "prompt" in s:
+                kwargs["prompt"] = s["prompt"]
+            if "temperature" in s:
+                kwargs["temperature"] = s["temperature"]
 
             response = await self._client.audio.transcriptions.create(**kwargs)
 

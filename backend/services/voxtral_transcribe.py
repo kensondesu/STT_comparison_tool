@@ -49,8 +49,9 @@ class VoxtralTranscribeService(TranscriptionService):
         self._key = settings.voxtral_endpoint_key
 
     async def transcribe(
-        self, audio_path: str, language: str | None = None
+        self, audio_path: str, language: str | None = None, settings: dict | None = None
     ) -> TranscriptionResult:
+        s = settings or {}
         file_path = Path(audio_path)
         ext = file_path.suffix.lstrip(".").lower()
         audio_bytes = file_path.read_bytes()
@@ -59,12 +60,18 @@ class VoxtralTranscribeService(TranscriptionService):
         audio_format = AUDIO_FORMAT_MAP.get(ext, AudioContentFormat.WAV)
 
         lang_hint = f" The audio language is {language}." if language else ""
-        system_prompt = (
+        default_prompt = (
             "You are a precise audio transcription assistant. "
             "Transcribe the following audio exactly as spoken. "
             "Output ONLY the transcribed text, nothing else."
             f"{lang_hint}"
         )
+
+        # Custom system prompt: replace or append
+        if "system_prompt" in s:
+            system_prompt = s["system_prompt"]
+        else:
+            system_prompt = default_prompt
 
         if self._use_key:
             credential = AzureKeyCredential(self._key)
@@ -78,8 +85,8 @@ class VoxtralTranscribeService(TranscriptionService):
         )
 
         try:
-            response = await client.complete(
-                messages=[
+            complete_kwargs: dict = {
+                "messages": [
                     SystemMessage(content=system_prompt),
                     UserMessage(
                         content=[
@@ -93,8 +100,16 @@ class VoxtralTranscribeService(TranscriptionService):
                         ],
                     ),
                 ],
-                model="voxtral-mini",
-            )
+                "model": "voxtral-mini",
+            }
+
+            # Custom settings
+            if "temperature" in s:
+                complete_kwargs["temperature"] = s["temperature"]
+            if "max_tokens" in s:
+                complete_kwargs["max_tokens"] = s["max_tokens"]
+
+            response = await client.complete(**complete_kwargs)
         finally:
             await client.close()
 

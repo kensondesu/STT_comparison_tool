@@ -63,3 +63,20 @@
 - Verify McManus's audio endpoint supports Range headers
 - Test with actual audio files across all 5 methods
 - Performance profiling if needed (segment rendering, polling frequency)
+
+## Per-Model Custom Settings UI — 2025-07-18
+
+### Delivery Summary
+- **4 files changed**, **436 lines** added
+- Per-method ⚙️ settings modal with schema-driven form rendering
+- `METHOD_SETTINGS_SCHEMA` covers all 7 methods (profanity filters, diarization, temperature, prompts, phrase lists, etc.)
+- `api.js` updated to pass `method_settings` in transcription requests
+- Dark mode fully supported
+
+### Key Design Decisions
+1. **Schema-driven modal**: `METHOD_SETTINGS_SCHEMA` defines fields per method; modal is built dynamically — adding new settings requires only a schema entry
+2. **Cog indicator**: `.has-settings` class adds a small purple dot via `::after` pseudo-element — subtle but visible
+3. **Module-safe event binding**: Avoided inline `onclick` attributes (incompatible with ES modules); all modal buttons wired via `addEventListener` in `bindEvents()`
+4. **Data transforms on save**: `phrase_list` → split to array; `llm_speech.prompt` → wrapped in `[value]`; only non-default values included in request
+5. **Escape + backdrop close**: Keyboard and click-outside handlers attached on open, cleaned up on close to prevent leaks
+6. **`.method-check-row` wrapper**: New `<div>` wraps each checkbox `<label>` + cog `<button>` in a flexbox row — keeps layout clean without breaking existing checkbox styling

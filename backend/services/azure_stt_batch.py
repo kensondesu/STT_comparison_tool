@@ -107,16 +107,18 @@ class AzureSttBatchService(TranscriptionService):
         }
 
     async def _create_batch_job(
-        self, sas_url: str, language: str | None, session: aiohttp.ClientSession
+        self, sas_url: str, language: str | None, session: aiohttp.ClientSession,
+        settings: dict | None = None,
     ) -> str:
         """Create a batch transcription job. Returns the transcription URL for polling."""
+        s = settings or {}
         body: dict = {
             "contentUrls": [sas_url],
             "displayName": f"mai-transcribe-{uuid.uuid4().hex[:8]}",
             "properties": {
-                "wordLevelTimestampsEnabled": False,
+                "wordLevelTimestampsEnabled": s.get("word_level_timestamps", False),
                 "punctuationMode": "DictatedAndAutomatic",
-                "profanityFilterMode": "None",
+                "profanityFilterMode": s.get("profanity_filter", "None"),
             },
         }
         if language:
@@ -174,12 +176,12 @@ class AzureSttBatchService(TranscriptionService):
     # --- Main entry point ---
 
     async def transcribe(
-        self, audio_path: str, language: str | None = None
+        self, audio_path: str, language: str | None = None, settings: dict | None = None
     ) -> TranscriptionResult:
         sas_url = await asyncio.to_thread(self._upload_to_blob, audio_path)
 
         async with aiohttp.ClientSession() as session:
-            transcription_url = await self._create_batch_job(sas_url, language, session)
+            transcription_url = await self._create_batch_job(sas_url, language, session, settings=settings)
             job = await self._poll_until_done(transcription_url, session)
 
             if job["status"] != "Succeeded":
