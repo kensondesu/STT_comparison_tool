@@ -141,8 +141,8 @@ async def test_health_llm_speech_configured_when_key_set(client, monkeypatch):
 
 async def test_health_llm_speech_not_configured_when_empty(client, monkeypatch):
     """LLM Speech should be 'not_configured' when both endpoint and key are empty."""
-    monkeypatch.setattr("backend.config.settings.azure_speech_key", "")
-    monkeypatch.setattr("backend.config.settings.azure_speech_endpoint", "")
+    monkeypatch.setattr("backend.config.settings.mai_speech_key", "")
+    monkeypatch.setattr("backend.config.settings.mai_speech_endpoint", "")
     resp = await client.get("/api/health")
     services = resp.json()["services"]
     assert services["llm_speech"] == "not_configured"

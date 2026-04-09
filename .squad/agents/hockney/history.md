@@ -152,3 +152,32 @@ McManus refactored all 5 Azure services from hardcoded API keys/connection strin
 
 ### Final result
 **81 passed, 21 skipped, 0 failed** — suite expanded from 88 to 102 tests, all green
+
+## Per-Model Custom Settings Tests — 2026-07-22
+
+### What was added
+10 new tests across 2 files covering the `settings: dict | None = None` parameter on all services and the `method_settings` field on `TranscribeRequest`.
+
+### test_services.py — TestCustomSettings (8 tests)
+- `test_fast_stt_phrase_list` — verifies `phraseList` appears in definition when `phrase_list` setting provided
+- `test_fast_stt_diarization` — verifies `diarization` block with `minCount`/`maxCount` when diarization enabled
+- `test_fast_stt_profanity_filter` — verifies `profanityFilterMode` in definition when `profanity_filter` set
+- `test_whisper_prompt_and_temperature` — mocks openai SDK, verifies `prompt` and `temperature` kwargs forwarded to `transcriptions.create()`
+- `test_llm_speech_prompt` — verifies `enhancedMode.prompt` in definition via `_build_definition()` static method
+- `test_llm_speech_translate_task` — verifies `enhancedMode.task` = "translate" and `enhancedMode.targetLanguage` in definition
+- `test_settings_none_works` — full mocked HTTP call with `settings=None`, confirms backward compat (no crash)
+- `test_unknown_settings_ignored` — full mocked HTTP call with unknown keys like `bogus_key`, confirms no crash
+
+### test_transcribe.py — 2 new endpoint tests
+- `test_method_settings_passed_to_service` — POST /api/transcribe with `method_settings`, verifies service's `transcribe()` receives the correct settings dict via `call_args.kwargs`
+- `test_method_settings_omitted` — POST without `method_settings`, verifies backward compat: job completes, service receives `settings=None`
+
+### Learnings
+- **`_build_definition()` is the cleanest unit test target** for Fast STT and LLM Speech settings — test the definition JSON structure directly rather than parsing FormData
+- **For Whisper settings, mock the SDK and inspect `call_args.kwargs`** — settings are unpacked into `transcriptions.create(**kwargs)`
+- **LLM Speech `_build_definition()` is a `@staticmethod`**, Fast STT's is an instance method — different invocation patterns
+- **When testing router→service settings plumbing**, use `patch().start()`/`.stop()` (not context manager) to keep the mock active across `asyncio.create_task` boundaries
+- **Pre-existing duplicate class discovered** — McManus had started a partial `TestCustomSettings` class; removed duplicate to avoid Python class name shadowing
+
+### Final result
+**91 passed, 21 skipped, 0 failed** — suite expanded from 102 to 112 tests (10 new), all green

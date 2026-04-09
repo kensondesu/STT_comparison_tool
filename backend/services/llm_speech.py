@@ -1,6 +1,7 @@
 """LLM Speech transcription service (Azure Fast Transcription enhanced mode).
 
-Uses the SAME Azure Speech resource and endpoint as STT Fast, but sends
+Uses the MAI Speech resource (same as MAI-Transcribe-1) since enhanced mode
+requires a resource in a supported region. Sends
 ``enhancedMode: { enabled: true, task: "transcribe" }`` in the definition.
 Language detection is automatic — no ``locales`` field is sent.
 
@@ -8,7 +9,7 @@ This is distinct from MAI-Transcribe-1 which uses
 ``"model": "mai-transcribe-1"`` in enhancedMode.
 
 Auth: ``DefaultAzureCredential`` (managed identity / Azure CLI).
-Falls back to API key if ``AZURE_SPEECH_KEY`` is set.
+Falls back to API key if ``MAI_SPEECH_KEY`` is set.
 """
 
 import json
@@ -28,12 +29,13 @@ class LlmSpeechService(TranscriptionService):
     """LLM Speech via Azure Fast Transcription with enhancedMode."""
 
     def __init__(self) -> None:
-        self._use_key = bool(settings.azure_speech_key)
-        self._key = settings.azure_speech_key
-        self._region = settings.azure_speech_region
+        # LLM Speech uses enhanced mode — requires the MAI resource
+        self._use_key = bool(settings.mai_speech_key)
+        self._key = settings.mai_speech_key
+        self._region = settings.mai_speech_region
         base = (
-            settings.azure_speech_endpoint.rstrip("/")
-            if settings.azure_speech_endpoint
+            settings.mai_speech_endpoint.rstrip("/")
+            if settings.mai_speech_endpoint
             else f"https://{self._region}.api.cognitive.microsoft.com"
         )
         self._url = f"{base}/speechtotext/transcriptions:transcribe?api-version=2025-10-15"

@@ -703,9 +703,9 @@ class TestLlmSpeechService:
 
     @pytest.fixture
     def mock_env(self, monkeypatch):
-        monkeypatch.setattr("backend.config.settings.azure_speech_key", "fake-key")
-        monkeypatch.setattr("backend.config.settings.azure_speech_region", "eastus")
-        monkeypatch.setattr("backend.config.settings.azure_speech_endpoint", "https://fake.speech.azure.com")
+        monkeypatch.setattr("backend.config.settings.mai_speech_key", "fake-key")
+        monkeypatch.setattr("backend.config.settings.mai_speech_region", "eastus")
+        monkeypatch.setattr("backend.config.settings.mai_speech_endpoint", "https://fake.speech.azure.com")
 
     async def test_transcribe_returns_result(self, mock_env):
         """Mocked HTTP POST should produce correct result; definition must have correct enhancedMode."""
@@ -793,9 +793,9 @@ class TestLlmSpeechService:
         except ImportError:
             pytest.skip("LlmSpeechService not yet implemented")
 
-        monkeypatch.setattr("backend.config.settings.azure_speech_key", "")
-        monkeypatch.setattr("backend.config.settings.azure_speech_region", "eastus")
-        monkeypatch.setattr("backend.config.settings.azure_speech_endpoint", "https://fake.speech.azure.com")
+        monkeypatch.setattr("backend.config.settings.mai_speech_key", "")
+        monkeypatch.setattr("backend.config.settings.mai_speech_region", "eastus")
+        monkeypatch.setattr("backend.config.settings.mai_speech_endpoint", "https://fake.speech.azure.com")
 
         mock_response = MagicMock()
         mock_response.status = 200
@@ -1018,191 +1018,3 @@ class TestCustomSettings:
 
         assert result.full_text == "Hello."
         assert len(result.segments) == 1
-
-
-# ---------------------------------------------------------------------------
-# Per-model custom settings
-# ---------------------------------------------------------------------------
-
-
-class TestCustomSettings:
-    """Test per-model custom settings are applied correctly."""
-
-    @pytest.fixture
-    def mock_env(self, monkeypatch):
-        monkeypatch.setattr("backend.config.settings.azure_speech_key", "fake-key")
-        monkeypatch.setattr("backend.config.settings.azure_speech_region", "eastus")
-        monkeypatch.setattr("backend.config.settings.azure_speech_endpoint", "https://fake.cognitiveservices.azure.com")
-        monkeypatch.setattr("backend.config.settings.azure_openai_api_key", "fake-key")
-        monkeypatch.setattr("backend.config.settings.azure_openai_endpoint", "https://fake.openai.azure.com/")
-        monkeypatch.setattr("backend.config.settings.azure_whisper_deployment_name", "whisper")
-
-    def _make_aiohttp_mock(self, json_data=None):
-        """Create a mock aiohttp response with the given JSON body."""
-        if json_data is None:
-            json_data = {
-                "combinedPhrases": [{"text": "Ok."}],
-                "phrases": [{"offsetMilliseconds": 0, "durationMilliseconds": 500, "text": "Ok."}],
-            }
-        mock_response = MagicMock()
-        mock_response.status = 200
-        mock_response.json = AsyncMock(return_value=json_data)
-        mock_response.__aenter__ = AsyncMock(return_value=mock_response)
-        mock_response.__aexit__ = AsyncMock(return_value=False)
-        mock_response.raise_for_status = MagicMock()
-        return mock_response
-
-    # --- Fast STT: phrase_list ---
-
-    async def test_fast_stt_phrase_list(self, mock_env):
-        """phrase_list setting should appear as phraseList in the definition."""
-        from backend.services.azure_stt_fast import AzureSttFastService
-        import io, json
-
-        captured = {}
-
-        def capture_post(*args, **kwargs):
-            captured.update(kwargs)
-            return self._make_aiohttp_mock()
-
-        fake_file = io.BytesIO(b"fake audio data")
-        with patch("aiohttp.ClientSession.post", side_effect=capture_post), \
-             patch("builtins.open", return_value=fake_file):
-            svc = AzureSttFastService()
-            await svc.transcribe(
-                "fake/path.wav",
-                language="en-US",
-                settings={"phrase_list": ["Azure", "Copilot"]},
-            )
-
-        form_data = captured["data"]
-        # FormData stores fields internally — extract the definition field
-        fields = form_data._fields  # list of tuples
-        definition_field = next(f for f in fields if f[0]["name"] == "definition")
-        definition = json.loads(definition_field[2])
-        assert definition["phraseList"] == ["Azure", "Copilot"]
-
-    # --- Fast STT: diarization ---
-
-    async def test_fast_stt_diarization(self, mock_env):
-        """diarization_enabled should produce a diarization block in the definition."""
-        from backend.services.azure_stt_fast import AzureSttFastService
-        import io, json
-
-        captured = {}
-
-        def capture_post(*args, **kwargs):
-            captured.update(kwargs)
-            return self._make_aiohttp_mock()
-
-        fake_file = io.BytesIO(b"fake audio data")
-        with patch("aiohttp.ClientSession.post", side_effect=capture_post), \
-             patch("builtins.open", return_value=fake_file):
-            svc = AzureSttFastService()
-            await svc.transcribe(
-                "fake/path.wav",
-                language="en-US",
-                settings={"diarization_enabled": True, "diarization_max_speakers": 6},
-            )
-
-        form_data = captured["data"]
-        fields = form_data._fields
-        definition_field = next(f for f in fields if f[0]["name"] == "definition")
-        definition = json.loads(definition_field[2])
-        assert "diarization" in definition
-        assert definition["diarization"]["speakers"]["maxCount"] == 6
-
-    # --- Whisper: prompt + temperature ---
-
-    async def test_whisper_prompt_and_temperature(self, mock_env):
-        """prompt and temperature settings should be forwarded as SDK kwargs."""
-        from backend.services.whisper_transcribe import WhisperTranscribeService
-
-        mock_result = MagicMock()
-        mock_result.text = "Test."
-        mock_result.language = "en"
-        mock_result.segments = []
-
-        mock_client = MagicMock()
-        mock_client.audio.transcriptions.create = AsyncMock(return_value=mock_result)
-
-        import io
-        fake_file = io.BytesIO(b"fake audio data")
-        with patch("backend.services.whisper_transcribe.AsyncAzureOpenAI", return_value=mock_client), \
-             patch("builtins.open", return_value=fake_file):
-            svc = WhisperTranscribeService()
-            await svc.transcribe(
-                "fake/path.wav",
-                language="en-US",
-                settings={"prompt": "Technical meeting", "temperature": 0.2},
-            )
-
-        call_kwargs = mock_client.audio.transcriptions.create.call_args
-        kw = call_kwargs.kwargs if call_kwargs.kwargs else call_kwargs[1]
-        assert kw["prompt"] == "Technical meeting"
-        assert kw["temperature"] == 0.2
-
-    # --- LLM Speech: prompt ---
-
-    async def test_llm_speech_prompt(self, mock_env):
-        """prompt setting should appear inside enhancedMode in the definition."""
-        from backend.services.llm_speech import LlmSpeechService
-        import io, json
-
-        captured = {}
-
-        def capture_post(*args, **kwargs):
-            captured.update(kwargs)
-            return self._make_aiohttp_mock()
-
-        fake_file = io.BytesIO(b"fake audio data")
-        with patch("aiohttp.ClientSession.post", side_effect=capture_post), \
-             patch("builtins.open", return_value=fake_file):
-            svc = LlmSpeechService()
-            await svc.transcribe(
-                "fake/path.wav",
-                language=None,
-                settings={"prompt": "Format as bullet points"},
-            )
-
-        form_data = captured["data"]
-        fields = form_data._fields
-        definition_field = next(f for f in fields if f[0]["name"] == "definition")
-        definition = json.loads(definition_field[2])
-        assert definition["enhancedMode"]["prompt"] == "Format as bullet points"
-
-    # --- settings=None doesn't crash ---
-
-    async def test_settings_none_does_not_crash(self, mock_env):
-        """Calling transcribe with settings=None should work without errors."""
-        from backend.services.azure_stt_fast import AzureSttFastService
-        import io
-
-        mock_resp = self._make_aiohttp_mock()
-        fake_file = io.BytesIO(b"fake audio data")
-        with patch("aiohttp.ClientSession.post", return_value=mock_resp), \
-             patch("builtins.open", return_value=fake_file):
-            svc = AzureSttFastService()
-            result = await svc.transcribe("fake/path.wav", language="en-US", settings=None)
-
-        assert result.full_text == "Ok."
-
-    # --- Unknown settings are silently ignored ---
-
-    async def test_unknown_settings_ignored(self, mock_env):
-        """Passing unrecognised keys in settings should not raise."""
-        from backend.services.azure_stt_fast import AzureSttFastService
-        import io
-
-        mock_resp = self._make_aiohttp_mock()
-        fake_file = io.BytesIO(b"fake audio data")
-        with patch("aiohttp.ClientSession.post", return_value=mock_resp), \
-             patch("builtins.open", return_value=fake_file):
-            svc = AzureSttFastService()
-            result = await svc.transcribe(
-                "fake/path.wav",
-                language="en-US",
-                settings={"bogus": "value", "nonsense": 42},
-            )
-
-        assert result.full_text == "Ok."

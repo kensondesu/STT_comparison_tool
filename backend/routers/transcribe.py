@@ -224,7 +224,7 @@ async def health_check():
             bool(settings.azure_openai_endpoint)
         ),
         "llm_speech": _configured(
-            bool(settings.azure_speech_endpoint or settings.azure_speech_key)
+            bool(settings.mai_speech_endpoint or settings.mai_speech_key)
         ),
     }
     return HealthResponse(status="ok", services=services)
