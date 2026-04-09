@@ -11,6 +11,8 @@ const METHODS = [
     { id: 'mai_transcribe', label: 'MAI-Transcribe-1' },
     { id: 'aoai_transcribe', label: 'Azure GPT-4o-transcribe' },
     { id: 'voxtral', label: 'Voxtral Mini' },
+    { id: 'whisper', label: 'Azure Whisper' },
+    { id: 'llm_speech', label: 'LLM Speech' },
 ];
 
 const LANGUAGES = [

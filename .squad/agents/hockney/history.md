@@ -120,3 +120,35 @@ McManus refactored all 5 Azure services from hardcoded API keys/connection strin
 - **Backend:** All services now support managed identity + key fallback
 - **Tests:** 67 passed, 21 skipped, 0 failed — suite remains stable
 - **Test patterns established:** Bearer token mocking, credential fallback validation patterns ready for frontend integration testing
+
+## Whisper + LLM Speech Test Coverage — 2026-07-22
+
+### What was added
+14 new tests across 2 files for the two new transcription services on `feature/whisper-llm-speech`.
+
+### test_services.py — 7 new tests
+
+**TestWhisperTranscribeService (3 tests):**
+- `test_transcribe_returns_segments` — mocks `AsyncAzureOpenAI` SDK, verifies verbose_json dict segments parse into `Segment` objects with correct start/end times
+- `test_language_passed_correctly` — verifies "en-US" → "en" ISO-639-1 split before SDK call
+- `test_auth_failure` — openai `AuthenticationError` propagates correctly
+
+**TestLlmSpeechService (4 tests):**
+- `test_transcribe_returns_result` — mocks aiohttp POST, verifies definition has `enhancedMode: { enabled: true, task: "transcribe" }` with NO `model` or `locales` fields
+- `test_parse_result_reuses_fast_stt` — confirms `AzureSttFastService._parse_result()` produces correct segments from millisecond offsets
+- `test_auth_bearer_token` — verifies `Authorization: Bearer` header when no key set
+- `test_auth_api_key_fallback` — verifies `Ocp-Apim-Subscription-Key` header when key is set
+
+### test_health.py — 7 new tests
+- `test_health_whisper_appears` / `test_health_llm_speech_appears` — both services listed
+- `test_health_whisper_configured_when_endpoint_set` / `_not_configured_when_empty`
+- `test_health_llm_speech_configured_when_endpoint_set` / `_when_key_set` / `_not_configured_when_empty`
+
+### Learnings
+- **Whisper uses dict segments, not objects:** `verbose_json` response returns segments as dicts with `start`/`end`/`text` keys — the service handles both dict and object access patterns
+- **LLM Speech definition must NOT include `model` or `locales`** — this distinguishes it from MAI-Transcribe-1 which uses `"model": "mai-transcribe-1"` in enhancedMode
+- **LLM Speech reuses `AzureSttFastService._parse_result()`** — no need to test parsing separately in the LLM Speech class, just verify the shared parser works with its input format
+- **Auth pattern:** Whisper follows the AOAI pattern (API key → `AsyncAzureOpenAI`), LLM Speech follows the STT pattern (key → `Ocp-Apim-Subscription-Key`, no key → Bearer token)
+
+### Final result
+**81 passed, 21 skipped, 0 failed** — suite expanded from 88 to 102 tests, all green

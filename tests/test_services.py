@@ -593,3 +593,269 @@ class TestVoxtralTranscribeService:
             svc = VoxtralTranscribeService()
             with pytest.raises(Exception):
                 await svc.transcribe("fake/path.wav", language=None)
+
+
+# ---------------------------------------------------------------------------
+# Whisper Transcribe service — Azure OpenAI Whisper
+# ---------------------------------------------------------------------------
+
+
+class TestWhisperTranscribeService:
+
+    @pytest.fixture
+    def mock_env(self, monkeypatch):
+        monkeypatch.setattr("backend.config.settings.azure_openai_api_key", "fake-key")
+        monkeypatch.setattr("backend.config.settings.azure_openai_endpoint", "https://fake.openai.azure.com/")
+        monkeypatch.setattr("backend.config.settings.azure_whisper_deployment_name", "whisper")
+
+    async def test_transcribe_returns_segments(self, mock_env):
+        """Mocked openai SDK should produce segments with start/end times from verbose_json."""
+        try:
+            from backend.services.whisper_transcribe import WhisperTranscribeService
+        except ImportError:
+            pytest.skip("WhisperTranscribeService not yet implemented")
+
+        mock_result = MagicMock()
+        mock_result.text = "Hello from Whisper."
+        mock_result.language = "en"
+        mock_result.segments = [
+            {"start": 0.0, "end": 1.8, "text": "Hello from"},
+            {"start": 1.8, "end": 3.5, "text": " Whisper."},
+        ]
+
+        mock_client = MagicMock()
+        mock_client.audio.transcriptions.create = AsyncMock(return_value=mock_result)
+
+        import io
+        fake_file = io.BytesIO(b"fake audio data")
+        with patch("backend.services.whisper_transcribe.AsyncAzureOpenAI", return_value=mock_client), \
+             patch("builtins.open", return_value=fake_file):
+            svc = WhisperTranscribeService()
+            result = await svc.transcribe("fake/path.wav", language="en-US")
+
+        assert result.full_text == "Hello from Whisper."
+        assert len(result.segments) == 2
+        assert result.segments[0].start_time == 0.0
+        assert result.segments[0].end_time == 1.8
+        assert result.segments[0].text == "Hello from"
+        assert result.segments[1].start_time == 1.8
+        assert result.segments[1].end_time == 3.5
+        assert result.detected_language == "en"
+
+    async def test_language_passed_correctly(self, mock_env):
+        """Language 'en-US' should be split to ISO-639-1 'en' before SDK call."""
+        try:
+            from backend.services.whisper_transcribe import WhisperTranscribeService
+        except ImportError:
+            pytest.skip("WhisperTranscribeService not yet implemented")
+
+        mock_result = MagicMock()
+        mock_result.text = "Test."
+        mock_result.language = "en"
+        mock_result.segments = []
+
+        mock_client = MagicMock()
+        mock_client.audio.transcriptions.create = AsyncMock(return_value=mock_result)
+
+        import io
+        fake_file = io.BytesIO(b"fake audio data")
+        with patch("backend.services.whisper_transcribe.AsyncAzureOpenAI", return_value=mock_client), \
+             patch("builtins.open", return_value=fake_file):
+            svc = WhisperTranscribeService()
+            await svc.transcribe("fake/path.wav", language="en-US")
+
+        call_kwargs = mock_client.audio.transcriptions.create.call_args
+        assert call_kwargs.kwargs.get("language") == "en" or \
+               (call_kwargs[1].get("language") == "en")
+
+    async def test_auth_failure(self, mock_env):
+        """AuthenticationError from openai SDK should propagate."""
+        try:
+            from backend.services.whisper_transcribe import WhisperTranscribeService
+        except ImportError:
+            pytest.skip("WhisperTranscribeService not yet implemented")
+
+        from openai import AuthenticationError
+        mock_client = MagicMock()
+        mock_client.audio.transcriptions.create = AsyncMock(
+            side_effect=AuthenticationError(
+                message="Invalid API key",
+                response=MagicMock(status_code=401),
+                body=None,
+            )
+        )
+
+        import io
+        fake_file = io.BytesIO(b"fake audio data")
+        with patch("backend.services.whisper_transcribe.AsyncAzureOpenAI", return_value=mock_client), \
+             patch("builtins.open", return_value=fake_file):
+            svc = WhisperTranscribeService()
+            with pytest.raises(Exception):
+                await svc.transcribe("fake/path.wav", language=None)
+
+
+# ---------------------------------------------------------------------------
+# LLM Speech service — Fast Transcription enhanced mode
+# ---------------------------------------------------------------------------
+
+
+class TestLlmSpeechService:
+
+    @pytest.fixture
+    def mock_env(self, monkeypatch):
+        monkeypatch.setattr("backend.config.settings.azure_speech_key", "fake-key")
+        monkeypatch.setattr("backend.config.settings.azure_speech_region", "eastus")
+        monkeypatch.setattr("backend.config.settings.azure_speech_endpoint", "https://fake.speech.azure.com")
+
+    async def test_transcribe_returns_result(self, mock_env):
+        """Mocked HTTP POST should produce correct result; definition must have correct enhancedMode."""
+        try:
+            from backend.services.llm_speech import LlmSpeechService
+        except ImportError:
+            pytest.skip("LlmSpeechService not yet implemented")
+
+        mock_response = MagicMock()
+        mock_response.status = 200
+        mock_response.json = AsyncMock(return_value={
+            "combinedPhrases": [{"text": "LLM Speech result."}],
+            "phrases": [
+                {
+                    "offsetMilliseconds": 500,
+                    "durationMilliseconds": 2000,
+                    "text": "LLM Speech result.",
+                    "locale": "en-US",
+                }
+            ],
+        })
+        mock_response.__aenter__ = AsyncMock(return_value=mock_response)
+        mock_response.__aexit__ = AsyncMock(return_value=False)
+        mock_response.raise_for_status = MagicMock()
+
+        posted_data = {}
+
+        def capture_post(*args, **kwargs):
+            posted_data.update(kwargs)
+            return mock_response
+
+        import io
+        fake_file = io.BytesIO(b"fake audio data")
+        with patch("aiohttp.ClientSession.post", side_effect=capture_post), \
+             patch("builtins.open", return_value=fake_file):
+            svc = LlmSpeechService()
+            result = await svc.transcribe("fake/path.wav", language=None)
+
+        assert result.full_text == "LLM Speech result."
+        assert len(result.segments) == 1
+        assert result.segments[0].start_time == 0.5
+        assert abs(result.segments[0].end_time - 2.5) < 1e-6
+
+        # Verify the definition JSON has correct enhancedMode structure
+        definition = LlmSpeechService._build_definition()
+        assert definition == {
+            "enhancedMode": {
+                "enabled": True,
+                "task": "transcribe",
+            },
+        }
+        # Must NOT have 'model' or 'locales' keys
+        assert "model" not in definition.get("enhancedMode", {})
+        assert "locales" not in definition
+
+    async def test_parse_result_reuses_fast_stt(self, mock_env):
+        """Response parsing should produce correct segments from millisecond offsets."""
+        try:
+            from backend.services.azure_stt_fast import AzureSttFastService
+        except ImportError:
+            pytest.skip("AzureSttFastService not yet implemented")
+
+        result = AzureSttFastService._parse_result({
+            "combinedPhrases": [{"text": "Hello world."}],
+            "phrases": [
+                {
+                    "offsetMilliseconds": 1000,
+                    "durationMilliseconds": 3000,
+                    "text": "Hello world.",
+                    "locale": "en-US",
+                }
+            ],
+        })
+
+        assert result.full_text == "Hello world."
+        assert len(result.segments) == 1
+        assert result.segments[0].start_time == 1.0
+        assert result.segments[0].end_time == 4.0
+        assert result.detected_language == "en-US"
+
+    async def test_auth_bearer_token(self, monkeypatch):
+        """When no key is set, bearer token should be used."""
+        try:
+            from backend.services.llm_speech import LlmSpeechService
+        except ImportError:
+            pytest.skip("LlmSpeechService not yet implemented")
+
+        monkeypatch.setattr("backend.config.settings.azure_speech_key", "")
+        monkeypatch.setattr("backend.config.settings.azure_speech_region", "eastus")
+        monkeypatch.setattr("backend.config.settings.azure_speech_endpoint", "https://fake.speech.azure.com")
+
+        mock_response = MagicMock()
+        mock_response.status = 200
+        mock_response.json = AsyncMock(return_value={
+            "combinedPhrases": [{"text": "Token test."}],
+            "phrases": [],
+        })
+        mock_response.__aenter__ = AsyncMock(return_value=mock_response)
+        mock_response.__aexit__ = AsyncMock(return_value=False)
+        mock_response.raise_for_status = MagicMock()
+
+        posted_kwargs = {}
+
+        def capture_post(*args, **kwargs):
+            posted_kwargs.update(kwargs)
+            return mock_response
+
+        import io
+        fake_file = io.BytesIO(b"fake audio data")
+        with patch("aiohttp.ClientSession.post", side_effect=capture_post), \
+             patch("builtins.open", return_value=fake_file):
+            svc = LlmSpeechService()
+            await svc.transcribe("fake/path.wav", language=None)
+
+        headers = posted_kwargs.get("headers", {})
+        assert "Authorization" in headers
+        assert headers["Authorization"].startswith("Bearer ")
+        assert "Ocp-Apim-Subscription-Key" not in headers
+
+    async def test_auth_api_key_fallback(self, mock_env):
+        """When key is set, Ocp-Apim-Subscription-Key header should be used."""
+        try:
+            from backend.services.llm_speech import LlmSpeechService
+        except ImportError:
+            pytest.skip("LlmSpeechService not yet implemented")
+
+        mock_response = MagicMock()
+        mock_response.status = 200
+        mock_response.json = AsyncMock(return_value={
+            "combinedPhrases": [{"text": "Key test."}],
+            "phrases": [],
+        })
+        mock_response.__aenter__ = AsyncMock(return_value=mock_response)
+        mock_response.__aexit__ = AsyncMock(return_value=False)
+        mock_response.raise_for_status = MagicMock()
+
+        posted_kwargs = {}
+
+        def capture_post(*args, **kwargs):
+            posted_kwargs.update(kwargs)
+            return mock_response
+
+        import io
+        fake_file = io.BytesIO(b"fake audio data")
+        with patch("aiohttp.ClientSession.post", side_effect=capture_post), \
+             patch("builtins.open", return_value=fake_file):
+            svc = LlmSpeechService()
+            await svc.transcribe("fake/path.wav", language=None)
+
+        headers = posted_kwargs.get("headers", {})
+        assert "Ocp-Apim-Subscription-Key" in headers
+        assert headers["Ocp-Apim-Subscription-Key"] == "fake-key"
+        assert "Authorization" not in headers
