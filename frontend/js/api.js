@@ -29,14 +29,18 @@ export async function uploadFile(file) {
  * @param {string} fileId
  * @param {string[]} methods
  * @param {string|null} language  BCP-47 code or null for auto-detect
+ * @param {Object|null} methodSettings  Per-method custom settings
  * @returns {Promise<{job_id: string, file_id: string, status: string, methods: Object, language: string|null, created_at: string}>}
  */
-export async function startTranscription(fileId, methods, language) {
+export async function startTranscription(fileId, methods, language, methodSettings = null) {
     const body = {
         file_id: fileId,
         methods,
         language: language || null,
     };
+    if (methodSettings && Object.keys(methodSettings).length > 0) {
+        body.method_settings = methodSettings;
+    }
 
     const res = await fetch(`${BASE_URL}/api/transcribe`, {
         method: 'POST',

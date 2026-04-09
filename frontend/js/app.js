@@ -54,12 +54,51 @@ const LANGUAGES = [
 const POLL_INTERVAL_MS = 3000;
 const ACCEPTED_FORMATS = ['.wav', '.mp3', '.flac', '.ogg', '.m4a', '.webm'];
 
+const METHOD_SETTINGS_SCHEMA = {
+    azure_stt_batch: [
+        { key: 'profanity_filter', label: 'Profanity Filter', type: 'select', options: ['None', 'Masked', 'Removed', 'Tags'], default: 'None' },
+        { key: 'word_level_timestamps', label: 'Word-Level Timestamps', type: 'checkbox', default: false },
+    ],
+    azure_stt_fast: [
+        { key: 'phrase_list', label: 'Phrase List (comma-separated)', type: 'text', default: '', placeholder: 'Contoso, Rehaan, Azure' },
+        { key: 'profanity_filter', label: 'Profanity Filter', type: 'select', options: ['None', 'Masked', 'Removed', 'Tags'], default: 'None' },
+        { key: 'diarization_enabled', label: 'Speaker Diarization', type: 'checkbox', default: false },
+        { key: 'diarization_max_speakers', label: 'Max Speakers', type: 'number', default: 4, min: 1, max: 35 },
+        { key: 'language_autodetect', label: 'Language Auto-detect', type: 'checkbox', default: true },
+    ],
+    mai_transcribe: [
+        { key: 'profanity_filter', label: 'Profanity Filter', type: 'select', options: ['None', 'Masked', 'Removed', 'Tags'], default: 'None' },
+    ],
+    llm_speech: [
+        { key: 'prompt', label: 'Custom Prompt', type: 'textarea', default: '', placeholder: 'Output must be in lexical format.' },
+        { key: 'task', label: 'Task', type: 'select', options: ['transcribe', 'translate'], default: 'transcribe' },
+        { key: 'target_language', label: 'Target Language (for translate)', type: 'text', default: '', placeholder: 'ko, fr, de...' },
+        { key: 'profanity_filter', label: 'Profanity Filter', type: 'select', options: ['None', 'Masked', 'Removed', 'Tags'], default: 'None' },
+        { key: 'diarization_enabled', label: 'Speaker Diarization', type: 'checkbox', default: false },
+        { key: 'diarization_max_speakers', label: 'Max Speakers', type: 'number', default: 4, min: 1, max: 35 },
+    ],
+    whisper: [
+        { key: 'prompt', label: 'Vocabulary Hints', type: 'text', default: '', placeholder: 'Technical terms, names...' },
+        { key: 'temperature', label: 'Temperature', type: 'number', default: 0, min: 0, max: 1, step: 0.1 },
+    ],
+    aoai_transcribe: [
+        { key: 'prompt', label: 'Vocabulary Hints', type: 'text', default: '', placeholder: 'Technical terms, names...' },
+        { key: 'temperature', label: 'Temperature', type: 'number', default: 0, min: 0, max: 1, step: 0.1 },
+    ],
+    voxtral: [
+        { key: 'system_prompt', label: 'System Prompt', type: 'textarea', default: '', placeholder: 'Custom transcription instructions...' },
+        { key: 'temperature', label: 'Temperature', type: 'number', default: 0.7, min: 0, max: 2, step: 0.1 },
+        { key: 'max_tokens', label: 'Max Tokens', type: 'number', default: 4096, min: 100, max: 16384 },
+    ],
+};
+
 // ── State ──────────────────────────────────────────────────
 
 let currentFileId = null;
 let currentJobId = null;
 let pollTimer = null;
 let resultsData = {};
+let methodSettings = {};
 
 // ── DOM refs (set in init) ─────────────────────────────────
 
@@ -115,11 +154,178 @@ function buildLanguageOptions() {
 
 function buildMethodCheckboxes() {
     METHODS.forEach(({ id, label }) => {
-        const wrapper = document.createElement('label');
-        wrapper.className = 'method-check';
-        wrapper.innerHTML = `<input type="checkbox" name="method" value="${id}" checked> ${label}`;
+        const wrapper = document.createElement('div');
+        wrapper.className = 'method-check-row';
+        const lbl = document.createElement('label');
+        lbl.className = 'method-check';
+        lbl.innerHTML = `<input type="checkbox" name="method" value="${id}" checked> ${label}`;
+        wrapper.appendChild(lbl);
+
+        if (METHOD_SETTINGS_SCHEMA[id]) {
+            const cog = document.createElement('button');
+            cog.type = 'button';
+            cog.className = 'settings-cog';
+            cog.dataset.method = id;
+            cog.title = `Settings for ${label}`;
+            cog.textContent = '⚙️';
+            cog.addEventListener('click', (e) => {
+                e.stopPropagation();
+                openSettingsModal(id);
+            });
+            wrapper.appendChild(cog);
+        }
         $methodChecks.appendChild(wrapper);
     });
+}
+
+// ── Settings modal ─────────────────────────────────────────
+
+function openSettingsModal(methodId) {
+    const schema = METHOD_SETTINGS_SCHEMA[methodId];
+    if (!schema) return;
+
+    const info = METHODS.find((m) => m.id === methodId);
+    const $modal = document.getElementById('settings-modal');
+    const $title = document.getElementById('modal-title');
+    const $body = document.getElementById('modal-body');
+    const $saveBtn = document.getElementById('modal-save-btn');
+
+    $title.textContent = `${info?.label ?? methodId} Settings`;
+
+    const saved = methodSettings[methodId] || {};
+    let fieldsHtml = '';
+    for (const field of schema) {
+        const val = saved[field.key] ?? field.default;
+        fieldsHtml += `<div class="modal-field">`;
+        fieldsHtml += `<label for="setting-${field.key}">${escapeHtml(field.label)}</label>`;
+
+        if (field.type === 'select') {
+            fieldsHtml += `<select id="setting-${field.key}" data-key="${field.key}">`;
+            for (const opt of field.options) {
+                const selected = val === opt ? ' selected' : '';
+                fieldsHtml += `<option value="${opt}"${selected}>${escapeHtml(opt)}</option>`;
+            }
+            fieldsHtml += `</select>`;
+        } else if (field.type === 'checkbox') {
+            const checked = val ? ' checked' : '';
+            fieldsHtml += `<label class="modal-checkbox"><input type="checkbox" id="setting-${field.key}" data-key="${field.key}"${checked}> Enabled</label>`;
+        } else if (field.type === 'textarea') {
+            const displayVal = Array.isArray(val) ? val.join('\n') : (val || '');
+            fieldsHtml += `<textarea id="setting-${field.key}" data-key="${field.key}" rows="3"${field.placeholder ? ` placeholder="${escapeHtml(field.placeholder)}"` : ''}>${escapeHtml(displayVal)}</textarea>`;
+        } else if (field.type === 'number') {
+            let attrs = `type="number" id="setting-${field.key}" data-key="${field.key}" value="${val}"`;
+            if (field.min != null) attrs += ` min="${field.min}"`;
+            if (field.max != null) attrs += ` max="${field.max}"`;
+            if (field.step != null) attrs += ` step="${field.step}"`;
+            fieldsHtml += `<input ${attrs}>`;
+        } else {
+            // text
+            const displayVal = Array.isArray(val) ? val.join(', ') : (val || '');
+            fieldsHtml += `<input type="text" id="setting-${field.key}" data-key="${field.key}" value="${escapeHtml(displayVal)}"${field.placeholder ? ` placeholder="${escapeHtml(field.placeholder)}"` : ''}>`;
+        }
+        fieldsHtml += `</div>`;
+    }
+    $body.innerHTML = fieldsHtml;
+
+    $saveBtn.onclick = () => saveMethodSettings(methodId);
+    $modal.style.display = 'flex';
+    $modal.dataset.method = methodId;
+
+    // Close on backdrop click
+    $modal._backdropHandler = (e) => {
+        if (e.target === $modal) closeSettingsModal();
+    };
+    $modal.addEventListener('click', $modal._backdropHandler);
+
+    // Close on Escape
+    $modal._escHandler = (e) => {
+        if (e.key === 'Escape') closeSettingsModal();
+    };
+    document.addEventListener('keydown', $modal._escHandler);
+}
+
+function closeSettingsModal() {
+    const $modal = document.getElementById('settings-modal');
+    $modal.style.display = 'none';
+    if ($modal._backdropHandler) {
+        $modal.removeEventListener('click', $modal._backdropHandler);
+        $modal._backdropHandler = null;
+    }
+    if ($modal._escHandler) {
+        document.removeEventListener('keydown', $modal._escHandler);
+        $modal._escHandler = null;
+    }
+}
+
+function saveMethodSettings(methodId) {
+    const schema = METHOD_SETTINGS_SCHEMA[methodId];
+    if (!schema) return;
+
+    const settings = {};
+    let hasNonDefault = false;
+
+    for (const field of schema) {
+        const el = document.getElementById(`setting-${field.key}`);
+        if (!el) continue;
+
+        let val;
+        if (field.type === 'checkbox') {
+            val = el.checked;
+        } else if (field.type === 'number') {
+            val = parseFloat(el.value);
+        } else {
+            val = el.value;
+        }
+
+        // Transform phrase_list: comma-separated string → array
+        if (field.key === 'phrase_list' && typeof val === 'string') {
+            val = val.split(',').map((s) => s.trim()).filter(Boolean);
+            if (val.length === 0 && (Array.isArray(field.default) ? field.default.length === 0 : field.default === '')) continue;
+        }
+
+        // Transform prompt for llm_speech: wrap single string in array
+        if (field.key === 'prompt' && methodId === 'llm_speech' && typeof val === 'string') {
+            val = val.trim() ? [val.trim()] : [];
+            if (val.length === 0) continue;
+        }
+
+        // Skip values that match the default
+        const isDefault = (Array.isArray(val) && Array.isArray(field.default))
+            ? JSON.stringify(val) === JSON.stringify(field.default)
+            : val === field.default || (val === '' && field.default === '');
+
+        if (!isDefault) {
+            settings[field.key] = val;
+            hasNonDefault = true;
+        }
+    }
+
+    if (hasNonDefault) {
+        methodSettings[methodId] = settings;
+    } else {
+        delete methodSettings[methodId];
+    }
+
+    updateCogIndicators();
+    closeSettingsModal();
+}
+
+function updateCogIndicators() {
+    document.querySelectorAll('.settings-cog').forEach((cog) => {
+        const mid = cog.dataset.method;
+        cog.classList.toggle('has-settings', !!methodSettings[mid]);
+    });
+}
+
+function getActiveMethodSettings() {
+    const selectedMethods = getSelectedMethods();
+    const active = {};
+    for (const m of selectedMethods) {
+        if (methodSettings[m] && Object.keys(methodSettings[m]).length > 0) {
+            active[m] = methodSettings[m];
+        }
+    }
+    return Object.keys(active).length > 0 ? active : null;
 }
 
 // ── Event binding ──────────────────────────────────────────
@@ -152,6 +358,10 @@ function bindEvents() {
 
     // Theme
     $themeToggle.addEventListener('click', toggleTheme);
+
+    // Modal close buttons
+    document.getElementById('modal-close-x').addEventListener('click', closeSettingsModal);
+    document.getElementById('modal-cancel-btn').addEventListener('click', closeSettingsModal);
 }
 
 // ── File handling ──────────────────────────────────────────
@@ -214,7 +424,8 @@ async function handleTranscribe() {
         player.loadAudio(api.getAudioUrl(currentFileId));
 
         // 3. Start transcription
-        const jobRes = await api.startTranscription(currentFileId, methods, language);
+        const activeSettings = getActiveMethodSettings();
+        const jobRes = await api.startTranscription(currentFileId, methods, language, activeSettings);
         currentJobId = jobRes.job_id;
         showStatus('Transcription in progress…', 20);
 
