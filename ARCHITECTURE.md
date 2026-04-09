@@ -1,6 +1,6 @@
 # MAI_transcribe — Architecture
 
-> PoC: Audio transcription comparison webapp — upload audio, transcribe with 5 engines, compare results with timecoded playback.
+> PoC: Audio transcription comparison webapp — upload audio, transcribe with 7 engines, compare results with timecoded playback.
 
 ## Directory Structure
 
@@ -23,7 +23,9 @@ MAI_transcribe/
 │   │   ├── azure_stt_fast.py     # Azure STT — Fast Transcription
 │   │   ├── mai_transcribe.py     # MAI-Transcribe-1
 │   │   ├── aoai_transcribe.py    # Azure OpenAI gpt-4o-transcribe
-│   │   └── voxtral_transcribe.py # Voxtral Mini via Azure Foundry
+│   │   ├── voxtral_transcribe.py # Voxtral Mini via Azure Foundry
+│   │   ├── whisper_transcribe.py  # Azure OpenAI Whisper
+│   │   └── llm_speech.py         # LLM Speech (Fast Transcription enhanced mode)
 │   ├── models/
 │   │   └── schemas.py       # Pydantic request/response models
 │   └── utils/
@@ -56,7 +58,7 @@ MAI_transcribe/
 
 ## Transcription Service Integration
 
-All 5 services implement a common `TranscriptionService` base class:
+All 7 services implement a common `TranscriptionService` base class:
 
 ```python
 class TranscriptionService(ABC):
@@ -125,6 +127,30 @@ class TranscriptionService(ABC):
 | **Key env vars** | `VOXTRAL_ENDPOINT_URL` |
 | **Notes** | Voxtral is a chat model that accepts audio input, not a dedicated STT API. Transcription is extracted from the text response. Timecode granularity may be limited. |
 
+### 6. Azure OpenAI — Whisper
+
+| Detail | Value |
+|--------|-------|
+| **SDK/API** | `openai` Python SDK (Azure-configured) |
+| **Auth** | `DefaultAzureCredential` via `azure_ad_token_provider` (falls back to API key if `AZURE_OPENAI_API_KEY` set) |
+| **Flow** | `client.audio.transcriptions.create(model="whisper", file=audio, response_format="verbose_json", timestamp_granularities=["segment"])` |
+| **Timecodes** | `verbose_json` returns `segments[]` with `start` and `end` in seconds — pass through |
+| **Latency** | Fast — synchronous call |
+| **Key env vars** | `AZURE_OPENAI_ENDPOINT`, `AZURE_WHISPER_DEPLOYMENT_NAME` |
+| **Notes** | Uses same Azure OpenAI resource as gpt-4o-transcribe. Unlike gpt-4o-transcribe, Whisper natively supports `verbose_json` with segment-level timecodes. Language param uses ISO-639-1 (`en`, `fr`). |
+
+### 7. LLM Speech — Azure Fast Transcription Enhanced Mode
+
+| Detail | Value |
+|--------|-------|
+| **SDK/API** | REST API v2025-10-15 (`speechtotext/transcriptions:transcribe`) |
+| **Auth** | `DefaultAzureCredential` bearer token (falls back to `Ocp-Apim-Subscription-Key` if `AZURE_SPEECH_KEY` set) |
+| **Flow** | Same endpoint as Fast Transcription but with `definition: { "enhancedMode": { "enabled": true, "task": "transcribe" } }` |
+| **Timecodes** | Same response format as Fast Transcription — offset/duration in milliseconds |
+| **Latency** | Fast — synchronous |
+| **Key env vars** | `AZURE_SPEECH_ENDPOINT` |
+| **Notes** | Uses same Speech resource as Fast Transcription. No `locales` needed — language detection is automatic. Different from MAI-Transcribe-1 which uses `"model": "mai-transcribe-1"`. Reuses `AzureSttFastService._parse_result()`. |
+
 ## Timecode Format (Normalized)
 
 All services normalize their output to this common segment format:
@@ -154,8 +180,10 @@ All services normalize their output to this common segment format:
 
 **Normalization rules per service:**
 - Azure STT (Batch/Fast/MAI): Convert `offsetInTicks` and `durationInTicks` from 100ns units → seconds (`/ 10_000_000`)
-- Azure OpenAI: Already in seconds — pass through
+- Azure OpenAI (gpt-4o-transcribe): Already in seconds — pass through
+- Whisper: `verbose_json` returns `segments[]` with `start`/`end` in seconds — pass through
 - Voxtral: Parse from model response or assign single segment spanning full audio duration
+- LLM Speech: Same response format as Fast Transcription — reuses `AzureSttFastService._parse_result()`
 
 ## Job Lifecycle
 
@@ -175,7 +203,9 @@ Each method within a job has independent status:
   "azure_stt_fast": "completed",
   "mai_transcribe": "completed",
   "aoai_transcribe": "failed",
-  "voxtral": "processing"
+  "voxtral": "processing",
+  "whisper": "completed",
+  "llm_speech": "processing"
 }
 ```
 
@@ -213,10 +243,11 @@ AZURE_STORAGE_ACCOUNT_NAME=      # required — storage account name for blob UR
 # AZURE_STORAGE_CONNECTION_STRING= # optional fallback
 AZURE_STORAGE_CONTAINER_NAME=transcription-audio
 
-# Azure OpenAI (used by gpt-4o-transcribe)
+# Azure OpenAI (used by gpt-4o-transcribe and Whisper)
 # AZURE_OPENAI_API_KEY=          # optional fallback
 AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/
 AZURE_OPENAI_DEPLOYMENT_NAME=gpt-4o-transcribe
+AZURE_WHISPER_DEPLOYMENT_NAME=whisper
 
 # Voxtral Mini (Azure Foundry deployment)
 VOXTRAL_ENDPOINT_URL=

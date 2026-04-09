@@ -26,6 +26,8 @@ from backend.services.azure_stt_fast import AzureSttFastService
 from backend.services.mai_transcribe import MaiTranscribeService
 from backend.services.aoai_transcribe import AoaiTranscribeService
 from backend.services.voxtral_transcribe import VoxtralTranscribeService
+from backend.services.whisper_transcribe import WhisperTranscribeService
+from backend.services.llm_speech import LlmSpeechService
 from backend.services.base import TranscriptionService
 from backend.utils.storage import find_file, delete_file
 
@@ -43,6 +45,8 @@ SERVICE_MAP: dict[str, type[TranscriptionService]] = {
     "mai_transcribe": MaiTranscribeService,
     "aoai_transcribe": AoaiTranscribeService,
     "voxtral": VoxtralTranscribeService,
+    "whisper": WhisperTranscribeService,
+    "llm_speech": LlmSpeechService,
 }
 
 VALID_METHODS = list(SERVICE_MAP.keys())
@@ -212,6 +216,12 @@ async def health_check():
         ),
         "voxtral": _configured(
             bool(settings.voxtral_endpoint_url)
+        ),
+        "whisper": _configured(
+            bool(settings.azure_openai_endpoint)
+        ),
+        "llm_speech": _configured(
+            bool(settings.azure_speech_endpoint or settings.azure_speech_key)
         ),
     }
     return HealthResponse(status="ok", services=services)

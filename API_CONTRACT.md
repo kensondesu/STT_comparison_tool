@@ -75,7 +75,9 @@ Start transcription of an uploaded file using one or more methods.
     "azure_stt_fast",
     "mai_transcribe",
     "aoai_transcribe",
-    "voxtral"
+    "voxtral",
+    "whisper",
+    "llm_speech"
   ],
   "language": "en-US"
 }
@@ -120,7 +122,7 @@ Start transcription of an uploaded file using one or more methods.
 **Error: `400 Bad Request`**
 ```json
 {
-  "detail": "Invalid method: 'whisper'. Valid methods: azure_stt_batch, azure_stt_fast, mai_transcribe, aoai_transcribe, voxtral"
+  "detail": "Invalid method: 'foo'. Valid methods: azure_stt_batch, azure_stt_fast, mai_transcribe, aoai_transcribe, voxtral, whisper, llm_speech"
 }
 ```
 
@@ -316,7 +318,9 @@ Simple health check for the backend.
     "azure_stt_fast": "configured",
     "mai_transcribe": "configured",
     "aoai_transcribe": "configured",
-    "voxtral": "not_configured"
+    "voxtral": "not_configured",
+    "whisper": "configured",
+    "llm_speech": "configured"
   }
 }
 ```
@@ -396,6 +400,8 @@ Stream the uploaded audio file to the frontend for playback.
 | `mai_transcribe` | MAI-Transcribe-1 |
 | `aoai_transcribe` | Azure OpenAI gpt-4o-transcribe |
 | `voxtral` | Voxtral Mini via Azure Foundry |
+| `whisper` | Azure OpenAI Whisper |
+| `llm_speech` | LLM Speech (Azure Fast Transcription enhanced mode) |
 
 ---
 

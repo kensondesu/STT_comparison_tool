@@ -73,3 +73,21 @@
 - **Settings singleton vs monkeypatch.setenv**: `backend.config.settings` is created at import time. `monkeypatch.setenv()` only changes `os.environ` — it does NOT affect the already-initialized pydantic-settings object. Must use `monkeypatch.setattr("backend.config.settings.<field>", value)` to patch settings in tests.
 - **DefaultAzureCredential hangs in tests**: If settings fields are empty (the defaults), services take the managed identity auth path and `DefaultAzureCredential()` hangs trying to probe IMDS / Azure CLI. The fix is twofold: (1) set fake API keys on settings so the key-based path is always taken, and (2) mock `DefaultAzureCredential` and `get_cognitive_services_token` as a safety net.
 - **Autouse conftest fixture for credential safety**: Added `_block_azure_credentials` autouse fixture in `tests/conftest.py` that sets fake keys on all settings fields and mocks credential helpers. Every test gets this automatically — individual `mock_env` fixtures can override specific values.
+
+## Whisper + LLM Speech Integration — 2026-04-09
+
+### What Changed
+- Added 2 new transcription services: **Whisper** (Azure OpenAI) and **LLM Speech** (Fast Transcription enhanced mode)
+- `backend/services/whisper_transcribe.py` — uses `openai` SDK with `verbose_json` + `timestamp_granularities=["segment"]`; parses `segments[]` with `start`/`end` in seconds
+- `backend/services/llm_speech.py` — same endpoint as STT Fast with `enhancedMode: { enabled: true, task: "transcribe" }`; no `locales` (auto-detect); reuses `AzureSttFastService._parse_result()`
+- `backend/config.py` — added `azure_whisper_deployment_name` setting (default: "whisper")
+- `backend/models/schemas.py` — added `whisper` and `llm_speech` to `MethodName` enum
+- `backend/routers/transcribe.py` — added both to `SERVICE_MAP` and health check
+- `.env.example`, `ARCHITECTURE.md`, `API_CONTRACT.md` updated
+- Updated `tests/test_health.py` (expected 7 methods) and `tests/test_transcribe.py` (invalid method test used "whisper" — now uses "nonexistent_method")
+
+### Learnings
+- **Whisper vs gpt-4o-transcribe**: Whisper supports `verbose_json` natively with real segment timecodes; gpt-4o-transcribe only supports `json` (text-only, no segments). Different deployment names on same Azure OpenAI resource.
+- **LLM Speech vs MAI-Transcribe-1**: Both use enhancedMode on Fast Transcription endpoint. LLM Speech uses `"task": "transcribe"` (no model specified); MAI uses `"model": "mai-transcribe-1"`. LLM Speech skips `locales` entirely — language detection is automatic.
+- **Parser reuse pattern holds**: LLM Speech reuses `AzureSttFastService._parse_result()` just like MAI-Transcribe-1 — same response format.
+- **Test brittleness**: Health test hardcoded service count; invalid-method test used a method name that later became valid. Both needed updating when adding new services.

@@ -12,6 +12,8 @@ class MethodName(str, Enum):
     mai_transcribe = "mai_transcribe"
     aoai_transcribe = "aoai_transcribe"
     voxtral = "voxtral"
+    whisper = "whisper"
+    llm_speech = "llm_speech"
 
 
 class JobStatusValue(str, Enum):

@@ -87,7 +87,7 @@ async def test_start_transcription_single_method(client, wav_bytes, mock_all_ser
 async def test_start_transcription_invalid_method(client, wav_bytes):
     """An invalid method name should return 400 or 422."""
     file_id = await _upload_wav(client, wav_bytes)
-    resp = await _start_transcription(client, file_id, methods=["whisper"])
+    resp = await _start_transcription(client, file_id, methods=["nonexistent_method"])
     assert resp.status_code in (400, 422)
 
     body = resp.json()

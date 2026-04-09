@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     azure_openai_api_key: str = ""      # optional fallback
     azure_openai_endpoint: str = ""
     azure_openai_deployment_name: str = "gpt-4o-transcribe"
+    azure_whisper_deployment_name: str = "whisper"
 
     # Voxtral Mini (Azure Foundry)
     voxtral_endpoint_url: str = ""

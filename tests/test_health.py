@@ -31,7 +31,7 @@ async def test_health_response_schema(client):
 
 
 async def test_health_lists_all_services(client):
-    """All 5 transcription methods should be listed under 'services'."""
+    """All 7 transcription methods should be listed under 'services'."""
     resp = await client.get("/api/health")
     services = resp.json()["services"]
 
@@ -41,6 +41,8 @@ async def test_health_lists_all_services(client):
         "mai_transcribe",
         "aoai_transcribe",
         "voxtral",
+        "whisper",
+        "llm_speech",
     }
     assert set(services.keys()) == expected_methods, (
         f"Missing services: {expected_methods - set(services.keys())}"
