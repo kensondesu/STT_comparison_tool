@@ -119,6 +119,43 @@ Added two new transcription engines to expand service roster from 5 to 7, levera
 - Backend fully operational with 7 transcription services
 - Frontend ready for production deployment
 
+### 7. Feature — Per-Method Custom Settings (2026-04-09)
+**By:** McManus (Backend Dev)
+**Status:** Completed
+
+#### Context
+Frontend needed ability to pass per-method configuration (phrase lists, diarization, profanity filters, temperature, prompts, etc.) to individual transcription services for advanced use cases.
+
+#### Decisions
+1. **Schema:** Added `method_settings: dict[str, dict] | None` to `TranscribeRequest`. Keys are method identifiers; values are freeform dicts.
+2. **Interface:** Extended `TranscriptionService.transcribe()` with `settings: dict | None = None`. All 7 services updated.
+3. **Router:** `_run_method()` receives per-method settings via `method_settings.get(method_name)`.
+4. **Safety:** Each service uses `.get()` for all keys. Missing keys never crash. `None` settings treated as empty dict.
+5. **No typed models:** Used `dict` instead of per-service Pydantic models to keep interface uniform and avoid schema bloat. Services own their own key validation.
+
+#### Per-Service Settings Support
+- **Azure STT Fast:** `phrase_list`, `profanity_filter`, `diarization_enabled`, `language_auto_detect`
+- **Azure STT Batch:** `profanity_filter`, `word_level_timestamps`
+- **MAI Transcribe:** `profanity_filter`
+- **LLM Speech:** `prompt`, `task`, `target_language`, `diarization_enabled`, `profanity_filter`
+- **Whisper:** `prompt`, `temperature`
+- **Azure OpenAI:** `prompt`, `temperature`
+- **Voxtral:** `system_prompt`, `temperature`, `max_tokens`
+
+#### Files Changed
+- `backend/models/schemas.py` — new `method_settings` field on TranscribeRequest
+- `backend/services/base.py` — updated abstract signature
+- All 7 service implementations — settings integration
+- `backend/routers/transcribe.py` — settings extraction and plumbing
+- `frontend/js/app.js` — settings modal UI with cog icon, dynamic forms, dark mode, indicator dot
+- `API_CONTRACT.md` — new Method Settings reference section
+
+#### Results
+- All 81 tests pass (21 skipped, 0 failed)
+- Full backward compatibility maintained
+- Frontend settings modal with schema-driven form generation
+- All 7 methods have customizable settings via UI
+
 ## Governance
 
 - All meaningful changes require team consensus
