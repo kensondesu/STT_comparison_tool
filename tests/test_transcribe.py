@@ -278,3 +278,73 @@ async def test_delete_job_not_found(client):
     """Deleting a non-existent job should return 404."""
     resp = await client.delete("/api/transcribe/00000000-0000-0000-0000-000000000000")
     assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Method settings
+# ---------------------------------------------------------------------------
+
+
+async def test_method_settings_passed_to_service(client, wav_bytes):
+    """POST /api/transcribe with method_settings should forward settings to the service."""
+    from unittest.mock import AsyncMock, patch
+    from backend.models.schemas import Segment
+    from backend.services.base import TranscriptionResult
+
+    file_id = await _upload_wav(client, wav_bytes)
+
+    mock_result = TranscriptionResult(
+        full_text="Settings test.",
+        segments=[Segment(start_time=0.0, end_time=1.0, text="Settings test.")],
+        detected_language="en-US",
+    )
+    mock_transcribe = AsyncMock(return_value=mock_result)
+    p = patch("backend.services.azure_stt_fast.AzureSttFastService.transcribe", mock_transcribe)
+    p.start()
+
+    try:
+        resp = await client.post("/api/transcribe", json={
+            "file_id": file_id,
+            "methods": ["azure_stt_fast"],
+            "method_settings": {
+                "azure_stt_fast": {"phrase_list": ["Contoso"]}
+            },
+        })
+        assert resp.status_code == 202
+        job_id = resp.json()["job_id"]
+
+        for _ in range(20):
+            await asyncio.sleep(0.1)
+            s = await client.get(f"/api/transcribe/{job_id}")
+            if s.json()["status"] in ("completed", "failed"):
+                break
+    finally:
+        p.stop()
+
+    mock_transcribe.assert_called_once()
+    assert mock_transcribe.call_args.kwargs.get("settings") == {"phrase_list": ["Contoso"]}
+
+
+async def test_method_settings_omitted(client, wav_bytes, mock_all_services):
+    """POST /api/transcribe without method_settings should still work (backward compat)."""
+    file_id = await _upload_wav(client, wav_bytes)
+
+    resp = await client.post("/api/transcribe", json={
+        "file_id": file_id,
+        "methods": ["azure_stt_fast"],
+    })
+    assert resp.status_code == 202
+    job_id = resp.json()["job_id"]
+
+    for _ in range(20):
+        await asyncio.sleep(0.1)
+        s = await client.get(f"/api/transcribe/{job_id}")
+        if s.json()["status"] in ("completed", "failed"):
+            break
+
+    assert s.json()["status"] == "completed"
+    assert s.json()["methods"]["azure_stt_fast"] == "completed"
+    # Verify backward compat: settings=None when method_settings omitted
+    fast_mock = mock_all_services["azure_stt_fast"]
+    fast_mock.assert_called_once()
+    assert fast_mock.call_args.kwargs.get("settings") is None
