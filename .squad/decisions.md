@@ -80,6 +80,45 @@ McManus: Backend must serve `/api/audio/{file_id}` with correct MIME types and R
 - **McManus/Fenster:** Run tests frequently during implementation; 88 tests serve as acceptance criteria
 - **Keaton:** No architecture changes implied; tests align with documented structure
 
+### 6. Feature — Whisper + LLM Speech Service Integration (2026-04-09)
+**By:** McManus (Backend Dev)
+**Status:** Completed
+
+#### Context
+Added two new transcription engines to expand service roster from 5 to 7, leveraging existing Azure infrastructure.
+
+#### Decisions
+1. **Whisper shares Azure OpenAI resource with gpt-4o-transcribe**
+   - Same endpoint and authentication (DefaultAzureCredential / API key fallback)
+   - Different deployment name: `AZURE_WHISPER_DEPLOYMENT_NAME` (default: "whisper")
+   - Uses `verbose_json` format with real segment-level timecodes (unlike gpt-4o-transcribe which only gets text)
+
+2. **LLM Speech reuses Fast Transcription endpoint and parser**
+   - Same endpoint and authentication as STT Fast
+   - Differentiated by `enhancedMode: { enabled: true, task: "transcribe" }` in service definition
+   - No `locales` field — language detection is fully automatic
+   - Response parsed by `AzureSttFastService._parse_result()` (same as MAI-Transcribe-1)
+
+3. **LLM Speech is distinct from MAI-Transcribe-1**
+   - MAI uses `"model": "mai-transcribe-1"` in enhancedMode + its own Speech resource
+   - LLM Speech uses `"task": "transcribe"` (no model) + the standard Speech resource
+   - Both reuse the same response parser
+
+#### Files Changed
+- `backend/services/whisper_transcribe.py` (new)
+- `backend/services/llm_speech.py` (new)
+- `backend/config.py` — added `azure_whisper_deployment_name`
+- `backend/models/schemas.py` — added enum values
+- `backend/routers/transcribe.py` — SERVICE_MAP + health check
+- `.env.example`, `ARCHITECTURE.md`, `API_CONTRACT.md` — docs
+- `tests/test_health.py`, `tests/test_transcribe.py` — test coverage
+- `frontend/js/app.js` — added Whisper and LLM Speech to METHODS array
+
+#### Results
+- All 67 tests pass (21 skipped)
+- Backend fully operational with 7 transcription services
+- Frontend ready for production deployment
+
 ## Governance
 
 - All meaningful changes require team consensus
