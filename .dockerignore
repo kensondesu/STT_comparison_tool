@@ -1,0 +1,15 @@
+.git
+.squad
+.copilot
+.github
+.venv
+__pycache__
+*.pyc
+.env
+.env.*
+uploads/*
+!uploads/.gitkeep
+tests/
+.pytest_cache/
+*.md
+!requirements.txt

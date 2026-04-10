@@ -1,0 +1,1169 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.42.1.51946",
+      "templateHash": "12001548962260884733"
+    }
+  },
+  "parameters": {
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]",
+      "metadata": {
+        "description": "Azure region for resource deployment"
+      }
+    },
+    "environmentName": {
+      "type": "string",
+      "metadata": {
+        "description": "Environment name used as prefix for all resources"
+      }
+    },
+    "deploymentMode": {
+      "type": "string",
+      "defaultValue": "greenfield",
+      "allowedValues": [
+        "greenfield",
+        "brownfield"
+      ],
+      "metadata": {
+        "description": "Deployment mode: greenfield creates all resources, brownfield uses existing ones"
+      }
+    },
+    "existingSpeechResourceId": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Resource ID of an existing Azure Speech resource (brownfield only)"
+      }
+    },
+    "existingMaiSpeechResourceId": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Resource ID of an existing MAI Speech resource (brownfield only)"
+      }
+    },
+    "existingOpenAiResourceId": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Resource ID of an existing Azure OpenAI resource (brownfield only)"
+      }
+    },
+    "existingStorageAccountId": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Resource ID of an existing Storage Account (brownfield only)"
+      }
+    },
+    "speechRegion": {
+      "type": "string",
+      "defaultValue": "swedencentral",
+      "metadata": {
+        "description": "Azure region for the Speech resource"
+      }
+    },
+    "maiSpeechRegion": {
+      "type": "string",
+      "defaultValue": "eastus",
+      "metadata": {
+        "description": "Azure region for the MAI Speech resource"
+      }
+    },
+    "openAiDeploymentName": {
+      "type": "string",
+      "defaultValue": "gpt-4o-transcribe",
+      "metadata": {
+        "description": "Azure OpenAI model deployment name for gpt-4o-transcribe"
+      }
+    },
+    "whisperDeploymentName": {
+      "type": "string",
+      "defaultValue": "whisper",
+      "metadata": {
+        "description": "Azure OpenAI model deployment name for Whisper"
+      }
+    },
+    "containerImage": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Container image to deploy (leave empty for placeholder)"
+      }
+    },
+    "containerPort": {
+      "type": "int",
+      "defaultValue": 8000,
+      "metadata": {
+        "description": "Port the container listens on"
+      }
+    }
+  },
+  "variables": {
+    "acrName": "[replace(format('{0}acr', parameters('environmentName')), '-', '')]",
+    "envName": "[format('{0}-env', parameters('environmentName'))]",
+    "appName": "[format('{0}-app', parameters('environmentName'))]",
+    "speechName": "[format('{0}-speech', parameters('environmentName'))]",
+    "maiSpeechName": "[format('{0}-mai-speech', parameters('environmentName'))]",
+    "openAiName": "[format('{0}-openai', parameters('environmentName'))]",
+    "storageName": "[replace(format('{0}stor', parameters('environmentName')), '-', '')]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "container-registry",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "name": {
+            "value": "[variables('acrName')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.42.1.51946",
+              "templateHash": "15409583372584842233"
+            }
+          },
+          "parameters": {
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region for the Container Registry"
+              }
+            },
+            "name": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the Container Registry"
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.ContainerRegistry/registries",
+              "apiVersion": "2023-07-01",
+              "name": "[parameters('name')]",
+              "location": "[parameters('location')]",
+              "sku": {
+                "name": "Basic"
+              },
+              "properties": {
+                "adminUserEnabled": false
+              }
+            }
+          ],
+          "outputs": {
+            "id": {
+              "type": "string",
+              "metadata": {
+                "description": "Resource ID of the Container Registry"
+              },
+              "value": "[resourceId('Microsoft.ContainerRegistry/registries', parameters('name'))]"
+            },
+            "name": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the Container Registry"
+              },
+              "value": "[parameters('name')]"
+            },
+            "loginServer": {
+              "type": "string",
+              "metadata": {
+                "description": "Login server URL for the Container Registry"
+              },
+              "value": "[reference(resourceId('Microsoft.ContainerRegistry/registries', parameters('name')), '2023-07-01').loginServer]"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "container-app-env",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "name": {
+            "value": "[variables('envName')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.42.1.51946",
+              "templateHash": "16168362859940291008"
+            }
+          },
+          "parameters": {
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region for the Container Apps Environment"
+              }
+            },
+            "name": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the Container Apps Environment"
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.OperationalInsights/workspaces",
+              "apiVersion": "2022-10-01",
+              "name": "[format('{0}-logs', parameters('name'))]",
+              "location": "[parameters('location')]",
+              "properties": {
+                "sku": {
+                  "name": "PerGB2018"
+                },
+                "retentionInDays": 30
+              }
+            },
+            {
+              "type": "Microsoft.App/managedEnvironments",
+              "apiVersion": "2024-03-01",
+              "name": "[parameters('name')]",
+              "location": "[parameters('location')]",
+              "properties": {
+                "appLogsConfiguration": {
+                  "destination": "log-analytics",
+                  "logAnalyticsConfiguration": {
+                    "customerId": "[reference(resourceId('Microsoft.OperationalInsights/workspaces', format('{0}-logs', parameters('name'))), '2022-10-01').customerId]",
+                    "sharedKey": "[listKeys(resourceId('Microsoft.OperationalInsights/workspaces', format('{0}-logs', parameters('name'))), '2022-10-01').primarySharedKey]"
+                  }
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.OperationalInsights/workspaces', format('{0}-logs', parameters('name')))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "id": {
+              "type": "string",
+              "metadata": {
+                "description": "Resource ID of the Container Apps Environment"
+              },
+              "value": "[resourceId('Microsoft.App/managedEnvironments', parameters('name'))]"
+            },
+            "name": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the Container Apps Environment"
+              },
+              "value": "[parameters('name')]"
+            }
+          }
+        }
+      }
+    },
+    {
+      "condition": "[equals(parameters('deploymentMode'), 'greenfield')]",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "speech",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('speechRegion')]"
+          },
+          "name": {
+            "value": "[variables('speechName')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.42.1.51946",
+              "templateHash": "15280482057801216123"
+            }
+          },
+          "parameters": {
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region for the Speech resource"
+              }
+            },
+            "name": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the Speech resource"
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.CognitiveServices/accounts",
+              "apiVersion": "2024-10-01",
+              "name": "[parameters('name')]",
+              "location": "[parameters('location')]",
+              "kind": "SpeechServices",
+              "sku": {
+                "name": "S0"
+              },
+              "properties": {
+                "customSubDomainName": "[parameters('name')]",
+                "publicNetworkAccess": "Enabled"
+              }
+            }
+          ],
+          "outputs": {
+            "id": {
+              "type": "string",
+              "metadata": {
+                "description": "Resource ID of the Speech resource"
+              },
+              "value": "[resourceId('Microsoft.CognitiveServices/accounts', parameters('name'))]"
+            },
+            "endpoint": {
+              "type": "string",
+              "metadata": {
+                "description": "Endpoint URL of the Speech resource"
+              },
+              "value": "[reference(resourceId('Microsoft.CognitiveServices/accounts', parameters('name')), '2024-10-01').endpoint]"
+            },
+            "name": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the Speech resource"
+              },
+              "value": "[parameters('name')]"
+            }
+          }
+        }
+      }
+    },
+    {
+      "condition": "[equals(parameters('deploymentMode'), 'greenfield')]",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "mai-speech",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('maiSpeechRegion')]"
+          },
+          "name": {
+            "value": "[variables('maiSpeechName')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.42.1.51946",
+              "templateHash": "2987758008544664623"
+            }
+          },
+          "parameters": {
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region for the MAI Speech resource"
+              }
+            },
+            "name": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the MAI Speech resource"
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.CognitiveServices/accounts",
+              "apiVersion": "2024-10-01",
+              "name": "[parameters('name')]",
+              "location": "[parameters('location')]",
+              "kind": "SpeechServices",
+              "sku": {
+                "name": "S0"
+              },
+              "properties": {
+                "customSubDomainName": "[parameters('name')]",
+                "publicNetworkAccess": "Enabled"
+              }
+            }
+          ],
+          "outputs": {
+            "id": {
+              "type": "string",
+              "metadata": {
+                "description": "Resource ID of the MAI Speech resource"
+              },
+              "value": "[resourceId('Microsoft.CognitiveServices/accounts', parameters('name'))]"
+            },
+            "endpoint": {
+              "type": "string",
+              "metadata": {
+                "description": "Endpoint URL of the MAI Speech resource"
+              },
+              "value": "[reference(resourceId('Microsoft.CognitiveServices/accounts', parameters('name')), '2024-10-01').endpoint]"
+            },
+            "name": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the MAI Speech resource"
+              },
+              "value": "[parameters('name')]"
+            }
+          }
+        }
+      }
+    },
+    {
+      "condition": "[equals(parameters('deploymentMode'), 'greenfield')]",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "openai",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "name": {
+            "value": "[variables('openAiName')]"
+          },
+          "gpt4oTranscribeDeploymentName": {
+            "value": "[parameters('openAiDeploymentName')]"
+          },
+          "whisperDeploymentName": {
+            "value": "[parameters('whisperDeploymentName')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.42.1.51946",
+              "templateHash": "17874731482692223259"
+            }
+          },
+          "parameters": {
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region for the OpenAI resource"
+              }
+            },
+            "name": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the OpenAI resource"
+              }
+            },
+            "gpt4oTranscribeDeploymentName": {
+              "type": "string",
+              "metadata": {
+                "description": "Deployment name for gpt-4o-transcribe model"
+              }
+            },
+            "whisperDeploymentName": {
+              "type": "string",
+              "metadata": {
+                "description": "Deployment name for Whisper model"
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.CognitiveServices/accounts",
+              "apiVersion": "2024-10-01",
+              "name": "[parameters('name')]",
+              "location": "[parameters('location')]",
+              "kind": "OpenAI",
+              "sku": {
+                "name": "S0"
+              },
+              "properties": {
+                "customSubDomainName": "[parameters('name')]",
+                "publicNetworkAccess": "Enabled"
+              }
+            },
+            {
+              "type": "Microsoft.CognitiveServices/accounts/deployments",
+              "apiVersion": "2024-10-01",
+              "name": "[format('{0}/{1}', parameters('name'), parameters('gpt4oTranscribeDeploymentName'))]",
+              "sku": {
+                "name": "GlobalStandard",
+                "capacity": 1
+              },
+              "properties": {
+                "model": {
+                  "format": "OpenAI",
+                  "name": "gpt-4o-transcribe",
+                  "version": "2025-03-20"
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.CognitiveServices/accounts', parameters('name'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.CognitiveServices/accounts/deployments",
+              "apiVersion": "2024-10-01",
+              "name": "[format('{0}/{1}', parameters('name'), parameters('whisperDeploymentName'))]",
+              "sku": {
+                "name": "Standard",
+                "capacity": 1
+              },
+              "properties": {
+                "model": {
+                  "format": "OpenAI",
+                  "name": "whisper",
+                  "version": "001"
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.CognitiveServices/accounts/deployments', parameters('name'), parameters('gpt4oTranscribeDeploymentName'))]",
+                "[resourceId('Microsoft.CognitiveServices/accounts', parameters('name'))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "id": {
+              "type": "string",
+              "metadata": {
+                "description": "Resource ID of the OpenAI resource"
+              },
+              "value": "[resourceId('Microsoft.CognitiveServices/accounts', parameters('name'))]"
+            },
+            "endpoint": {
+              "type": "string",
+              "metadata": {
+                "description": "Endpoint URL of the OpenAI resource"
+              },
+              "value": "[reference(resourceId('Microsoft.CognitiveServices/accounts', parameters('name')), '2024-10-01').endpoint]"
+            },
+            "name": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the OpenAI resource"
+              },
+              "value": "[parameters('name')]"
+            }
+          }
+        }
+      }
+    },
+    {
+      "condition": "[equals(parameters('deploymentMode'), 'greenfield')]",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "storage",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "name": {
+            "value": "[variables('storageName')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.42.1.51946",
+              "templateHash": "8698131425814962043"
+            }
+          },
+          "parameters": {
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region for the Storage Account"
+              }
+            },
+            "name": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the Storage Account"
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Storage/storageAccounts",
+              "apiVersion": "2023-05-01",
+              "name": "[parameters('name')]",
+              "location": "[parameters('location')]",
+              "kind": "StorageV2",
+              "sku": {
+                "name": "Standard_LRS"
+              },
+              "properties": {
+                "accessTier": "Hot",
+                "allowBlobPublicAccess": false,
+                "minimumTlsVersion": "TLS1_2",
+                "supportsHttpsTrafficOnly": true
+              }
+            },
+            {
+              "type": "Microsoft.Storage/storageAccounts/blobServices",
+              "apiVersion": "2023-05-01",
+              "name": "[format('{0}/{1}', parameters('name'), 'default')]",
+              "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts', parameters('name'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
+              "apiVersion": "2023-05-01",
+              "name": "[format('{0}/{1}/{2}', parameters('name'), 'default', 'transcription-audio')]",
+              "properties": {
+                "publicAccess": "None"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts/blobServices', parameters('name'), 'default')]"
+              ]
+            }
+          ],
+          "outputs": {
+            "id": {
+              "type": "string",
+              "metadata": {
+                "description": "Resource ID of the Storage Account"
+              },
+              "value": "[resourceId('Microsoft.Storage/storageAccounts', parameters('name'))]"
+            },
+            "name": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the Storage Account"
+              },
+              "value": "[parameters('name')]"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "container-app",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "name": {
+            "value": "[variables('appName')]"
+          },
+          "containerAppEnvId": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'container-app-env'), '2025-04-01').outputs.id.value]"
+          },
+          "containerImage": {
+            "value": "[parameters('containerImage')]"
+          },
+          "containerPort": {
+            "value": "[parameters('containerPort')]"
+          },
+          "acrLoginServer": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'container-registry'), '2025-04-01').outputs.loginServer.value]"
+          },
+          "speechEndpoint": "[if(equals(parameters('deploymentMode'), 'greenfield'), createObject('value', reference(resourceId('Microsoft.Resources/deployments', 'speech'), '2025-04-01').outputs.endpoint.value), createObject('value', ''))]",
+          "speechRegion": {
+            "value": "[parameters('speechRegion')]"
+          },
+          "maiSpeechEndpoint": "[if(equals(parameters('deploymentMode'), 'greenfield'), createObject('value', reference(resourceId('Microsoft.Resources/deployments', 'mai-speech'), '2025-04-01').outputs.endpoint.value), createObject('value', ''))]",
+          "maiSpeechRegion": {
+            "value": "[parameters('maiSpeechRegion')]"
+          },
+          "storageAccountName": "[if(equals(parameters('deploymentMode'), 'greenfield'), createObject('value', reference(resourceId('Microsoft.Resources/deployments', 'storage'), '2025-04-01').outputs.name.value), createObject('value', last(split(parameters('existingStorageAccountId'), '/'))))]",
+          "storageContainerName": {
+            "value": "transcription-audio"
+          },
+          "openAiEndpoint": "[if(equals(parameters('deploymentMode'), 'greenfield'), createObject('value', reference(resourceId('Microsoft.Resources/deployments', 'openai'), '2025-04-01').outputs.endpoint.value), createObject('value', ''))]",
+          "openAiDeploymentName": {
+            "value": "[parameters('openAiDeploymentName')]"
+          },
+          "whisperDeploymentName": {
+            "value": "[parameters('whisperDeploymentName')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.42.1.51946",
+              "templateHash": "3571126304498918751"
+            }
+          },
+          "parameters": {
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region for the Container App"
+              }
+            },
+            "name": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the Container App"
+              }
+            },
+            "containerAppEnvId": {
+              "type": "string",
+              "metadata": {
+                "description": "Resource ID of the Container Apps Environment"
+              }
+            },
+            "containerImage": {
+              "type": "string",
+              "metadata": {
+                "description": "Container image to deploy (e.g. myacr.azurecr.io/app:latest)"
+              }
+            },
+            "containerPort": {
+              "type": "int",
+              "metadata": {
+                "description": "Target port the container listens on"
+              }
+            },
+            "acrLoginServer": {
+              "type": "string",
+              "metadata": {
+                "description": "ACR login server URL"
+              }
+            },
+            "speechEndpoint": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure Speech endpoint URL"
+              }
+            },
+            "speechRegion": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure Speech region"
+              }
+            },
+            "maiSpeechEndpoint": {
+              "type": "string",
+              "metadata": {
+                "description": "MAI Speech endpoint URL"
+              }
+            },
+            "maiSpeechRegion": {
+              "type": "string",
+              "metadata": {
+                "description": "MAI Speech region"
+              }
+            },
+            "storageAccountName": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure Storage account name"
+              }
+            },
+            "storageContainerName": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure Storage container name for audio blobs"
+              }
+            },
+            "openAiEndpoint": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure OpenAI endpoint URL"
+              }
+            },
+            "openAiDeploymentName": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure OpenAI deployment name for gpt-4o-transcribe"
+              }
+            },
+            "whisperDeploymentName": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure OpenAI deployment name for Whisper"
+              }
+            }
+          },
+          "variables": {
+            "effectiveImage": "[if(not(empty(parameters('containerImage'))), parameters('containerImage'), 'mcr.microsoft.com/azuredocs/containerapps-helloworld:latest')]"
+          },
+          "resources": [
+            {
+              "type": "Microsoft.App/containerApps",
+              "apiVersion": "2024-03-01",
+              "name": "[parameters('name')]",
+              "location": "[parameters('location')]",
+              "identity": {
+                "type": "SystemAssigned"
+              },
+              "properties": {
+                "managedEnvironmentId": "[parameters('containerAppEnvId')]",
+                "configuration": {
+                  "ingress": {
+                    "external": true,
+                    "targetPort": "[parameters('containerPort')]",
+                    "transport": "http",
+                    "allowInsecure": false
+                  },
+                  "registries": [
+                    {
+                      "server": "[parameters('acrLoginServer')]",
+                      "identity": "system"
+                    }
+                  ]
+                },
+                "template": {
+                  "containers": [
+                    {
+                      "name": "[parameters('name')]",
+                      "image": "[variables('effectiveImage')]",
+                      "resources": {
+                        "cpu": "[json('1.0')]",
+                        "memory": "2Gi"
+                      },
+                      "env": [
+                        {
+                          "name": "AZURE_SPEECH_ENDPOINT",
+                          "value": "[parameters('speechEndpoint')]"
+                        },
+                        {
+                          "name": "AZURE_SPEECH_REGION",
+                          "value": "[parameters('speechRegion')]"
+                        },
+                        {
+                          "name": "MAI_SPEECH_ENDPOINT",
+                          "value": "[parameters('maiSpeechEndpoint')]"
+                        },
+                        {
+                          "name": "MAI_SPEECH_REGION",
+                          "value": "[parameters('maiSpeechRegion')]"
+                        },
+                        {
+                          "name": "AZURE_STORAGE_ACCOUNT_NAME",
+                          "value": "[parameters('storageAccountName')]"
+                        },
+                        {
+                          "name": "AZURE_STORAGE_CONTAINER_NAME",
+                          "value": "[parameters('storageContainerName')]"
+                        },
+                        {
+                          "name": "AZURE_OPENAI_ENDPOINT",
+                          "value": "[parameters('openAiEndpoint')]"
+                        },
+                        {
+                          "name": "AZURE_OPENAI_DEPLOYMENT_NAME",
+                          "value": "[parameters('openAiDeploymentName')]"
+                        },
+                        {
+                          "name": "AZURE_WHISPER_DEPLOYMENT_NAME",
+                          "value": "[parameters('whisperDeploymentName')]"
+                        }
+                      ]
+                    }
+                  ],
+                  "scale": {
+                    "minReplicas": 1,
+                    "maxReplicas": 3,
+                    "rules": [
+                      {
+                        "name": "http-scaling",
+                        "http": {
+                          "metadata": {
+                            "concurrentRequests": "50"
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          ],
+          "outputs": {
+            "id": {
+              "type": "string",
+              "metadata": {
+                "description": "Resource ID of the Container App"
+              },
+              "value": "[resourceId('Microsoft.App/containerApps', parameters('name'))]"
+            },
+            "name": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the Container App"
+              },
+              "value": "[parameters('name')]"
+            },
+            "fqdn": {
+              "type": "string",
+              "metadata": {
+                "description": "Fully qualified domain name of the Container App"
+              },
+              "value": "[reference(resourceId('Microsoft.App/containerApps', parameters('name')), '2024-03-01').configuration.ingress.fqdn]"
+            },
+            "principalId": {
+              "type": "string",
+              "metadata": {
+                "description": "Principal ID of the system-assigned managed identity"
+              },
+              "value": "[reference(resourceId('Microsoft.App/containerApps', parameters('name')), '2024-03-01', 'full').identity.principalId]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', 'container-registry')]",
+        "[resourceId('Microsoft.Resources/deployments', 'container-app-env')]",
+        "[resourceId('Microsoft.Resources/deployments', 'mai-speech')]",
+        "[resourceId('Microsoft.Resources/deployments', 'openai')]",
+        "[resourceId('Microsoft.Resources/deployments', 'speech')]",
+        "[resourceId('Microsoft.Resources/deployments', 'storage')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "role-assignments",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "principalId": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'container-app'), '2025-04-01').outputs.principalId.value]"
+          },
+          "speechResourceId": "[if(equals(parameters('deploymentMode'), 'greenfield'), createObject('value', reference(resourceId('Microsoft.Resources/deployments', 'speech'), '2025-04-01').outputs.id.value), createObject('value', parameters('existingSpeechResourceId')))]",
+          "maiSpeechResourceId": "[if(equals(parameters('deploymentMode'), 'greenfield'), createObject('value', reference(resourceId('Microsoft.Resources/deployments', 'mai-speech'), '2025-04-01').outputs.id.value), createObject('value', parameters('existingMaiSpeechResourceId')))]",
+          "openAiResourceId": "[if(equals(parameters('deploymentMode'), 'greenfield'), createObject('value', reference(resourceId('Microsoft.Resources/deployments', 'openai'), '2025-04-01').outputs.id.value), createObject('value', parameters('existingOpenAiResourceId')))]",
+          "storageResourceId": "[if(equals(parameters('deploymentMode'), 'greenfield'), createObject('value', reference(resourceId('Microsoft.Resources/deployments', 'storage'), '2025-04-01').outputs.id.value), createObject('value', parameters('existingStorageAccountId')))]",
+          "acrResourceId": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'container-registry'), '2025-04-01').outputs.id.value]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.42.1.51946",
+              "templateHash": "703453263765277836"
+            }
+          },
+          "parameters": {
+            "principalId": {
+              "type": "string",
+              "metadata": {
+                "description": "Principal ID of the Container App managed identity"
+              }
+            },
+            "speechResourceId": {
+              "type": "string",
+              "metadata": {
+                "description": "Resource ID of the Azure Speech resource"
+              }
+            },
+            "maiSpeechResourceId": {
+              "type": "string",
+              "metadata": {
+                "description": "Resource ID of the MAI Speech resource"
+              }
+            },
+            "openAiResourceId": {
+              "type": "string",
+              "metadata": {
+                "description": "Resource ID of the Azure OpenAI resource"
+              }
+            },
+            "storageResourceId": {
+              "type": "string",
+              "metadata": {
+                "description": "Resource ID of the Storage Account"
+              }
+            },
+            "acrResourceId": {
+              "type": "string",
+              "metadata": {
+                "description": "Resource ID of the Container Registry"
+              }
+            }
+          },
+          "variables": {
+            "cognitiveServicesUserId": "a97b65f3-24c7-4388-baec-2e87135dc908",
+            "cognitiveServicesOpenAiUserId": "5e0bd9bd-7b93-4f28-af87-19fc36ad61bd",
+            "storageBlobDataContributorId": "ba92f5b4-2d11-453d-a403-e96b0029c9fe",
+            "storageBlobDelegatorId": "db58b8e5-c6ad-4a2a-8342-4190687cbf4a",
+            "acrPullId": "7f951dda-4ed3-4680-a7ca-43fe172d538d"
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.CognitiveServices/accounts', last(split(parameters('speechResourceId'), '/')))]",
+              "name": "[guid(resourceId('Microsoft.CognitiveServices/accounts', last(split(parameters('speechResourceId'), '/'))), parameters('principalId'), variables('cognitiveServicesUserId'))]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('cognitiveServicesUserId'))]",
+                "principalId": "[parameters('principalId')]",
+                "principalType": "ServicePrincipal"
+              }
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.CognitiveServices/accounts', last(split(parameters('maiSpeechResourceId'), '/')))]",
+              "name": "[guid(resourceId('Microsoft.CognitiveServices/accounts', last(split(parameters('maiSpeechResourceId'), '/'))), parameters('principalId'), variables('cognitiveServicesUserId'))]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('cognitiveServicesUserId'))]",
+                "principalId": "[parameters('principalId')]",
+                "principalType": "ServicePrincipal"
+              }
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.CognitiveServices/accounts', last(split(parameters('openAiResourceId'), '/')))]",
+              "name": "[guid(resourceId('Microsoft.CognitiveServices/accounts', last(split(parameters('openAiResourceId'), '/'))), parameters('principalId'), variables('cognitiveServicesOpenAiUserId'))]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('cognitiveServicesOpenAiUserId'))]",
+                "principalId": "[parameters('principalId')]",
+                "principalType": "ServicePrincipal"
+              }
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.Storage/storageAccounts', last(split(parameters('storageResourceId'), '/')))]",
+              "name": "[guid(resourceId('Microsoft.Storage/storageAccounts', last(split(parameters('storageResourceId'), '/'))), parameters('principalId'), variables('storageBlobDataContributorId'))]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('storageBlobDataContributorId'))]",
+                "principalId": "[parameters('principalId')]",
+                "principalType": "ServicePrincipal"
+              }
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.Storage/storageAccounts', last(split(parameters('storageResourceId'), '/')))]",
+              "name": "[guid(resourceId('Microsoft.Storage/storageAccounts', last(split(parameters('storageResourceId'), '/'))), parameters('principalId'), variables('storageBlobDelegatorId'))]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('storageBlobDelegatorId'))]",
+                "principalId": "[parameters('principalId')]",
+                "principalType": "ServicePrincipal"
+              }
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.ContainerRegistry/registries', last(split(parameters('acrResourceId'), '/')))]",
+              "name": "[guid(resourceId('Microsoft.ContainerRegistry/registries', last(split(parameters('acrResourceId'), '/'))), parameters('principalId'), variables('acrPullId'))]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('acrPullId'))]",
+                "principalId": "[parameters('principalId')]",
+                "principalType": "ServicePrincipal"
+              }
+            }
+          ]
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', 'container-registry')]",
+        "[resourceId('Microsoft.Resources/deployments', 'container-app')]",
+        "[resourceId('Microsoft.Resources/deployments', 'mai-speech')]",
+        "[resourceId('Microsoft.Resources/deployments', 'openai')]",
+        "[resourceId('Microsoft.Resources/deployments', 'speech')]",
+        "[resourceId('Microsoft.Resources/deployments', 'storage')]"
+      ]
+    }
+  ],
+  "outputs": {
+    "appFqdn": {
+      "type": "string",
+      "metadata": {
+        "description": "Container App FQDN"
+      },
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'container-app'), '2025-04-01').outputs.fqdn.value]"
+    },
+    "appUrl": {
+      "type": "string",
+      "metadata": {
+        "description": "Container App URL"
+      },
+      "value": "[format('https://{0}', reference(resourceId('Microsoft.Resources/deployments', 'container-app'), '2025-04-01').outputs.fqdn.value)]"
+    },
+    "acrLoginServer": {
+      "type": "string",
+      "metadata": {
+        "description": "Container Registry login server"
+      },
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'container-registry'), '2025-04-01').outputs.loginServer.value]"
+    },
+    "appPrincipalId": {
+      "type": "string",
+      "metadata": {
+        "description": "Container App managed identity principal ID"
+      },
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'container-app'), '2025-04-01').outputs.principalId.value]"
+    }
+  }
+}

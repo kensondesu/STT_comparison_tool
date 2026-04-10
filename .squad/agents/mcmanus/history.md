@@ -115,3 +115,17 @@
 - **Router plumbing is minimal**: One new kwarg on `_run_method()` + a `.get()` call per task dispatch. Clean separation between routing and service logic.
 - **Settings dict over typed model**: Using `dict` instead of per-method Pydantic models keeps the interface uniform and avoids schema explosion. Services are responsible for validating their own keys.
 - All 81 tests pass with no changes needed — the settings parameter is fully additive.
+
+## Container Deployment Artifacts — 2026-04-10
+
+### What Changed
+- Created `Dockerfile` — multi-stage build with `python:3.13-slim` builder + production stage, copies backend/ + frontend/, exposes port 8000
+- Created `.dockerignore` — excludes .git, .squad, .venv, tests, __pycache__, .env files to keep image lean
+- Created `infra/deploy.sh` — full deployment script: creates resource group → deploys Bicep → builds image in ACR → updates Container App
+- Created `infra/README.md` — deployment guide with prerequisites, quickstart, brownfield config, env var reference, troubleshooting
+
+### Learnings
+- **Docker build verified**: Multi-stage build completes successfully; `python:3.13-slim` matches the project's uv venv Python version
+- **No .env in image**: All env vars injected via Container App configuration — keeps secrets out of the image layer
+- **ACR remote build**: `az acr build` avoids needing Docker daemon in CI; builds directly in Azure
+- **deploy.sh is idempotent**: Can re-run safely; `az group create` and `az deployment group create` are upsert operations

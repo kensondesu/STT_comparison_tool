@@ -62,3 +62,27 @@ Orchestrated complete PoC delivery: architecture, 13-file backend, 5-file fronte
 - Execute test suite post-integration
 - Verify timecode accuracy and audio streaming
 - Performance optimization if needed
+
+## Infrastructure Sprint — 2026-04-10
+
+### Sprint Summary
+Created complete Bicep IaC for Azure Container Apps deployment with managed identity auth.
+
+### Deliverables
+- **10 Bicep files** in `infra/` directory (main + 8 modules + params)
+- **Greenfield/brownfield dual mode** — deploy fresh or wire into existing resources
+- **Managed identity only** — zero secrets/keys in container env vars
+- **6 RBAC role assignments** — Cognitive Services User, OpenAI User, Storage Blob Data Contributor, Storage Blob Delegator, AcrPull
+- **Validated** — `az bicep build` succeeds (BCP318 warnings are safe false positives from conditional module outputs)
+
+### Key Design Decisions
+- System-assigned managed identity on Container App for all Azure service auth
+- ACR pull via managed identity (no admin credentials)
+- PoC-appropriate sizing: Basic ACR, 1 CPU/2Gi, Standard_LRS storage
+- Deterministic role assignment names via `guid()` for idempotency
+- Conditional resource creation with ternary output resolution for brownfield mode
+
+### Learnings
+- BCP318 warnings on conditional module outputs are false positives when the ternary condition mirrors the deployment condition
+- Bicep infers dependsOn from output references — explicit dependsOn is only needed for side-effect dependencies
+- OpenAI model deployments must be sequential (dependsOn between them) to avoid ARM conflicts on the parent resource
