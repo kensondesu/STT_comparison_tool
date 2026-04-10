@@ -37,10 +37,27 @@ RESOURCE_GROUP="my-existing-rg" \
 LOCATION="westeurope" \
 ENVIRONMENT_NAME="my-env" \
 DEPLOYMENT_MODE="brownfield" \
+EXISTING_SPEECH_RESOURCE_ID="..." \
+EXISTING_MAI_SPEECH_RESOURCE_ID="..." \
+EXISTING_OPENAI_RESOURCE_ID="..." \
+EXISTING_SPEECH_ENDPOINT="https://my-region.tts.speech.microsoft.com/" \
+EXISTING_MAI_SPEECH_ENDPOINT="https://my-region.tts.speech.microsoft.com/" \
+EXISTING_OPENAI_ENDPOINT="https://my-openai.openai.azure.com/" \
 ./infra/deploy.sh
 ```
 
-Or pass existing resource names via Bicep parameters — edit `infra/main.bicepparam` to specify existing ACR, Log Analytics workspace, etc.
+Or pass existing resource IDs and endpoints via Bicep parameters — edit `infra/main.bicepparam` to specify existing resources:
+
+```bicep
+param deploymentMode = 'brownfield'
+param existingSpeechResourceId = '/subscriptions/.../providers/Microsoft.CognitiveServices/accounts/my-speech'
+param existingMaiSpeechResourceId = '/subscriptions/.../providers/Microsoft.CognitiveServices/accounts/my-mai-speech'
+param existingOpenAiResourceId = '/subscriptions/.../providers/Microsoft.CognitiveServices/accounts/my-openai'
+param existingStorageAccountId = '/subscriptions/.../providers/Microsoft.Storage/storageAccounts/mystg'
+param existingSpeechEndpoint = 'https://my-region.tts.speech.microsoft.com/'
+param existingMaiSpeechEndpoint = 'https://my-region.tts.speech.microsoft.com/'
+param existingOpenAiEndpoint = 'https://my-openai.openai.azure.com/'
+```
 
 ## Environment Variables
 

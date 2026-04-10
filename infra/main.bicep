@@ -30,6 +30,15 @@ param existingOpenAiResourceId string = ''
 @description('Resource ID of an existing Storage Account (brownfield only)')
 param existingStorageAccountId string = ''
 
+@description('Endpoint URL of existing Speech resource (brownfield only)')
+param existingSpeechEndpoint string = ''
+
+@description('Endpoint URL of existing MAI Speech resource (brownfield only)')
+param existingMaiSpeechEndpoint string = ''
+
+@description('Endpoint URL of existing OpenAI resource (brownfield only)')
+param existingOpenAiEndpoint string = ''
+
 // ─── Service Configuration ───────────────────────────────────────────────────
 
 @description('Azure region for the Speech resource')
@@ -121,9 +130,9 @@ var maiSpeechResourceId = deploymentMode == 'greenfield' ? maiSpeech.outputs.id 
 var openAiResourceId = deploymentMode == 'greenfield' ? openAi.outputs.id : existingOpenAiResourceId
 var storageResourceId = deploymentMode == 'greenfield' ? storage.outputs.id : existingStorageAccountId
 
-var speechEndpoint = deploymentMode == 'greenfield' ? speech.outputs.endpoint : ''
-var maiSpeechEndpoint = deploymentMode == 'greenfield' ? maiSpeech.outputs.endpoint : ''
-var openAiEndpoint = deploymentMode == 'greenfield' ? openAi.outputs.endpoint : ''
+var speechEndpoint = deploymentMode == 'greenfield' ? speech.outputs.endpoint : existingSpeechEndpoint
+var maiSpeechEndpoint = deploymentMode == 'greenfield' ? maiSpeech.outputs.endpoint : existingMaiSpeechEndpoint
+var openAiEndpoint = deploymentMode == 'greenfield' ? openAi.outputs.endpoint : existingOpenAiEndpoint
 var storageAccountName = deploymentMode == 'greenfield' ? storage.outputs.name : last(split(existingStorageAccountId, '/'))
 
 // ─── Container App ───────────────────────────────────────────────────────────
