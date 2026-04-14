@@ -129,3 +129,23 @@
 - **No .env in image**: All env vars injected via Container App configuration — keeps secrets out of the image layer
 - **ACR remote build**: `az acr build` avoids needing Docker daemon in CI; builds directly in Azure
 - **deploy.sh is idempotent**: Can re-run safely; `az group create` and `az deployment group create` are upsert operations
+
+## Whisper → Azure STT Batch Refactor — 2026-04-10
+
+### What Changed
+- Rewrote `backend/services/whisper_transcribe.py` — now subclasses `AzureSttBatchService` instead of using the `openai` SDK
+- Flow is identical to STT Batch: upload blob → create batch job → poll → fetch results
+- Whisper model auto-discovered via `GET speechtotext/models/base` API (filters for "whisper" in displayName, picks newest)
+- `backend/config.py` — replaced `azure_whisper_deployment_name` with `azure_whisper_model_id` (optional, empty = auto-discover)
+- `backend/routers/transcribe.py` — health check now checks Speech config (`azure_speech_key` or `azure_speech_endpoint`) instead of `azure_openai_endpoint`
+- `.env.example` — replaced `AZURE_WHISPER_DEPLOYMENT_NAME` with `AZURE_WHISPER_MODEL_ID`
+- `frontend/js/app.js` — Whisper settings changed from `prompt`/`temperature` to `word_level_timestamps`/`profanity_filter`
+- `tests/test_services.py` — Whisper tests now mock batch flow (blob upload, model discovery, job creation, polling, result fetch)
+- `tests/test_health.py` — Whisper health tests now check Speech config instead of OpenAI endpoint
+- `ARCHITECTURE.md` and `API_CONTRACT.md` — updated Whisper docs to reflect batch transcription approach
+
+### Learnings
+- **Subclassing AzureSttBatchService is clean**: Only need to override `_create_batch_job()` and `transcribe()`. All blob helpers, polling, and result fetching are inherited.
+- **Whisper batch differences from standard STT Batch**: Uses `displayFormWordLevelTimestampsEnabled` (not `wordLevelTimestampsEnabled`), no `punctuationMode`, lexical field is empty (use `display` from nBest), requires `"model": {"self": "<uri>"}` in job body.
+- **Model auto-discovery via base models API**: `GET /speechtotext/models/base?api-version=2024-11-15` returns all base models; filter by displayName containing "whisper". Sorting by `createdDateTime` picks the newest version.
+- **Test mock complexity for batch flow**: Batch tests require 5 mock responses (model discovery, job create, poll, files list, content fetch) with proper async context managers — helper methods keep tests manageable.

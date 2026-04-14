@@ -1,87 +1,196 @@
-"""Azure OpenAI Whisper transcription service.
+"""Whisper transcription via Azure Speech Batch Transcription API.
 
-Uses the same Azure OpenAI resource as gpt-4o-transcribe but targets a
-Whisper deployment.  Unlike gpt-4o-transcribe, Whisper supports
-``verbose_json`` with segment-level timecodes natively.
+Subclasses ``AzureSttBatchService`` — the flow is identical (upload blob →
+create batch job → poll → fetch results) with these differences:
 
-Auth: ``DefaultAzureCredential`` (managed identity / Azure CLI).
-Falls back to API key if ``AZURE_OPENAI_API_KEY`` is set.
+- The batch job body includes ``"model": {"self": "<whisper_model_uri>"}``
+- Uses ``displayFormWordLevelTimestampsEnabled`` instead of ``wordLevelTimestampsEnabled``
+- Does not support ``punctuationMode``
+- The ``lexical`` field is empty; text is taken from the ``display`` field
+
+The Whisper base-model URI is auto-discovered via the Models API when
+``AZURE_WHISPER_MODEL_ID`` is not set.
+
+Auth: inherits from ``AzureSttBatchService`` (managed identity / key fallback).
 """
 
 import logging
+import uuid
 
-from openai import AsyncAzureOpenAI
+import aiohttp
 
-from backend.config import settings, COGNITIVE_SERVICES_SCOPE
+from backend.config import settings as app_settings
 from backend.models.schemas import Segment
-from backend.services.base import TranscriptionResult, TranscriptionService
+from backend.services.azure_stt_batch import AzureSttBatchService, TICKS_PER_SECOND
+from backend.services.base import TranscriptionResult
 
 logger = logging.getLogger(__name__)
 
 
-class WhisperTranscribeService(TranscriptionService):
-    """Azure OpenAI Whisper via openai SDK."""
+class WhisperTranscribeService(AzureSttBatchService):
+    """Whisper via Azure STT Batch Transcription."""
 
     def __init__(self) -> None:
-        if settings.azure_openai_api_key:
-            self._client = AsyncAzureOpenAI(
-                api_key=settings.azure_openai_api_key,
-                azure_endpoint=settings.azure_openai_endpoint,
-                api_version="2025-01-01-preview",
+        super().__init__()
+        self._whisper_model_uri: str | None = None
+
+    # ------------------------------------------------------------------
+    # Whisper model discovery
+    # ------------------------------------------------------------------
+
+    async def _resolve_whisper_model(self, session: aiohttp.ClientSession) -> str:
+        """Discover or return cached Whisper base-model URI."""
+        if self._whisper_model_uri:
+            return self._whisper_model_uri
+
+        base = (
+            app_settings.azure_speech_endpoint.rstrip("/")
+            if app_settings.azure_speech_endpoint
+            else f"https://{self._region}.api.cognitive.microsoft.com"
+        )
+
+        if app_settings.azure_whisper_model_id:
+            self._whisper_model_uri = (
+                f"{base}/speechtotext/models/base/"
+                f"{app_settings.azure_whisper_model_id}"
+                f"?api-version=2024-11-15"
             )
+            return self._whisper_model_uri
+
+        # Auto-discover: list base models, find Whisper
+        url = f"{base}/speechtotext/models/base?api-version=2024-11-15&skip=0&top=200"
+        async with session.get(url, headers=self._headers()) as resp:
+            resp.raise_for_status()
+            data = await resp.json()
+
+        whisper_models = [
+            m
+            for m in data.get("values", [])
+            if "whisper" in m.get("displayName", "").lower()
+        ]
+        if not whisper_models:
+            raise RuntimeError(
+                "No Whisper base model found in this Speech resource region"
+            )
+
+        whisper_models.sort(
+            key=lambda m: m.get("createdDateTime", ""), reverse=True
+        )
+        self._whisper_model_uri = whisper_models[0]["self"]
+        logger.info("Discovered Whisper model: %s", self._whisper_model_uri)
+        return self._whisper_model_uri
+
+    # ------------------------------------------------------------------
+    # Override batch-job creation for Whisper-specific payload
+    # ------------------------------------------------------------------
+
+    async def _create_batch_job(
+        self,
+        sas_url: str,
+        language: str | None,
+        session: aiohttp.ClientSession,
+        settings: dict | None = None,
+    ) -> str:
+        """Create a batch transcription job with the Whisper model reference."""
+        s = settings or {}
+        model_uri = await self._resolve_whisper_model(session)
+
+        body: dict = {
+            "contentUrls": [sas_url],
+            "displayName": f"whisper-{uuid.uuid4().hex[:8]}",
+            "model": {"self": model_uri},
+            "properties": {
+                "displayFormWordLevelTimestampsEnabled": s.get(
+                    "word_level_timestamps", False
+                ),
+                "profanityFilterMode": s.get("profanity_filter", "None"),
+                "timeToLiveHours": 1,
+            },
+        }
+        if language:
+            body["locale"] = language
         else:
-            from azure.identity.aio import (
-                DefaultAzureCredential as AsyncDefaultAzureCredential,
-                get_bearer_token_provider,
-            )
-            token_provider = get_bearer_token_provider(
-                AsyncDefaultAzureCredential(),
-                COGNITIVE_SERVICES_SCOPE,
-            )
-            self._client = AsyncAzureOpenAI(
-                azure_ad_token_provider=token_provider,
-                azure_endpoint=settings.azure_openai_endpoint,
-                api_version="2025-01-01-preview",
-            )
-        self._deployment = settings.azure_whisper_deployment_name
+            body["locale"] = "en-US"
+
+        async with session.post(
+            self._base_url, json=body, headers=self._headers()
+        ) as resp:
+            if resp.status >= 400:
+                body_text = await resp.text()
+                logger.error(
+                    "Whisper batch create %s: %s", resp.status, body_text
+                )
+            resp.raise_for_status()
+            data = await resp.json()
+            return data["self"]
+
+    # ------------------------------------------------------------------
+    # Override result parsing — Whisper uses display field (lexical empty)
+    # ------------------------------------------------------------------
 
     async def transcribe(
-        self, audio_path: str, language: str | None = None, settings: dict | None = None
+        self,
+        audio_path: str,
+        language: str | None = None,
+        settings: dict | None = None,
     ) -> TranscriptionResult:
-        s = settings or {}
-        with open(audio_path, "rb") as audio_file:
-            kwargs: dict = {
-                "model": self._deployment,
-                "file": audio_file,
-                "response_format": "verbose_json",
-                "timestamp_granularities": ["segment"],
-            }
-            if language:
-                kwargs["language"] = language.split("-")[0]  # ISO-639-1
+        import asyncio
 
-            # Custom settings
-            if "prompt" in s:
-                kwargs["prompt"] = s["prompt"]
-            if "temperature" in s:
-                kwargs["temperature"] = s["temperature"]
+        sas_url = await asyncio.to_thread(self._upload_to_blob, audio_path)
 
-            response = await self._client.audio.transcriptions.create(**kwargs)
+        async with aiohttp.ClientSession() as session:
+            transcription_url = await self._create_batch_job(
+                sas_url, language, session, settings=settings
+            )
+            job = await self._poll_until_done(transcription_url, session)
+
+            if job["status"] != "Succeeded":
+                error_msg = (
+                    job.get("properties", {})
+                    .get("error", {})
+                    .get("message", "Whisper batch transcription failed")
+                )
+                raise RuntimeError(error_msg)
+
+            results_data = await self._fetch_results(transcription_url, session)
 
         segments: list[Segment] = []
-        detected_lang: str | None = getattr(response, "language", None)
-        full_text = getattr(response, "text", "") or ""
+        all_text_parts: list[str] = []
+        detected_lang: str | None = None
 
-        for seg in getattr(response, "segments", []) or []:
-            text = seg.get("text", "").strip() if isinstance(seg, dict) else getattr(seg, "text", "").strip()
-            start = seg.get("start", 0.0) if isinstance(seg, dict) else getattr(seg, "start", 0.0)
-            end = seg.get("end", 0.0) if isinstance(seg, dict) else getattr(seg, "end", 0.0)
-            if text:
-                segments.append(
-                    Segment(start_time=round(start, 3), end_time=round(end, 3), text=text)
-                )
+        for result in results_data:
+            for combined in result.get("combinedRecognizedPhrases", []):
+                all_text_parts.append(combined.get("display", ""))
+                if not detected_lang:
+                    detected_lang = combined.get("locale")
+
+            for phrase in result.get("recognizedPhrases", []):
+                best = phrase.get("nBest", [{}])[0]
+                if "offsetInTicks" in phrase:
+                    start = phrase["offsetInTicks"] / TICKS_PER_SECOND
+                    end = start + phrase.get("durationInTicks", 0) / TICKS_PER_SECOND
+                else:
+                    start = phrase.get("offsetMilliseconds", 0) / 1000.0
+                    end = start + phrase.get("durationMilliseconds", 0) / 1000.0
+                # Whisper: lexical is empty, use display
+                text = best.get("display", "")
+                if text:
+                    segments.append(
+                        Segment(
+                            start_time=round(start, 3),
+                            end_time=round(end, 3),
+                            text=text,
+                        )
+                    )
+                if not detected_lang:
+                    detected_lang = phrase.get("locale")
 
         return TranscriptionResult(
             segments=segments,
-            full_text=full_text.strip(),
+            full_text=(
+                " ".join(all_text_parts)
+                if all_text_parts
+                else " ".join(s.text for s in segments)
+            ),
             detected_language=detected_lang,
         )

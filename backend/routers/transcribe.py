@@ -221,7 +221,7 @@ async def health_check():
             bool(settings.voxtral_endpoint_url)
         ),
         "whisper": _configured(
-            bool(settings.azure_openai_endpoint)
+            bool(settings.azure_speech_key or settings.azure_speech_endpoint)
         ),
         "llm_speech": _configured(
             bool(settings.mai_speech_endpoint or settings.mai_speech_key)

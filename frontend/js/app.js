@@ -78,8 +78,8 @@ const METHOD_SETTINGS_SCHEMA = {
         { key: 'diarization_max_speakers', label: 'Max Speakers', type: 'number', default: 4, min: 1, max: 35 },
     ],
     whisper: [
-        { key: 'prompt', label: 'Vocabulary Hints', type: 'text', default: '', placeholder: 'Technical terms, names...' },
-        { key: 'temperature', label: 'Temperature', type: 'number', default: 0, min: 0, max: 1, step: 0.1 },
+        { key: 'word_level_timestamps', label: 'Word-Level Timestamps', type: 'checkbox', default: false },
+        { key: 'profanity_filter', label: 'Profanity Filter', type: 'select', options: ['None', 'Masked', 'Removed', 'Tags'], default: 'None' },
     ],
     aoai_transcribe: [
         { key: 'prompt', label: 'Vocabulary Hints', type: 'text', default: '', placeholder: 'Technical terms, names...' },

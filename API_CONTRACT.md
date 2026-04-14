@@ -401,7 +401,7 @@ Stream the uploaded audio file to the frontend for playback.
 | `mai_transcribe` | MAI-Transcribe-1 |
 | `aoai_transcribe` | Azure OpenAI gpt-4o-transcribe |
 | `voxtral` | Voxtral Mini via Azure Foundry |
-| `whisper` | Azure OpenAI Whisper |
+| `whisper` | Whisper via Azure Speech Batch Transcription |
 | `llm_speech` | LLM Speech (Azure Fast Transcription enhanced mode) |
 
 ---
@@ -425,8 +425,8 @@ The optional `method_settings` field in `POST /api/transcribe` allows passing pe
       "language_autodetect": true
     },
     "whisper": {
-      "prompt": "Technical meeting about Azure cloud services",
-      "temperature": 0.2
+      "word_level_timestamps": true,
+      "profanity_filter": "None"
     }
   }
 }
@@ -472,8 +472,8 @@ The optional `method_settings` field in `POST /api/transcribe` allows passing pe
 
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
-| `prompt` | `string` | — | Vocabulary hints for the model (guide style/spelling) |
-| `temperature` | `float` | — | Sampling temperature (0.0–1.0). Lower = more deterministic |
+| `word_level_timestamps` | `bool` | `false` | Enable word-level timestamp output (display form) |
+| `profanity_filter` | `string` | `"None"` | Profanity filter mode: `"None"`, `"Masked"`, `"Removed"`, `"Tags"` |
 
 #### `aoai_transcribe`
 

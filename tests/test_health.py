@@ -106,16 +106,17 @@ async def test_health_llm_speech_appears(client):
 
 
 async def test_health_whisper_configured_when_endpoint_set(client, monkeypatch):
-    """Whisper should be 'configured' when azure_openai_endpoint is set."""
-    monkeypatch.setattr("backend.config.settings.azure_openai_endpoint", "https://fake.openai.azure.com/")
+    """Whisper should be 'configured' when azure_speech_endpoint is set."""
+    monkeypatch.setattr("backend.config.settings.azure_speech_endpoint", "https://fake.speech.azure.com")
     resp = await client.get("/api/health")
     services = resp.json()["services"]
     assert services["whisper"] == "configured"
 
 
 async def test_health_whisper_not_configured_when_empty(client, monkeypatch):
-    """Whisper should be 'not_configured' when azure_openai_endpoint is empty."""
-    monkeypatch.setattr("backend.config.settings.azure_openai_endpoint", "")
+    """Whisper should be 'not_configured' when speech key and endpoint are empty."""
+    monkeypatch.setattr("backend.config.settings.azure_speech_key", "")
+    monkeypatch.setattr("backend.config.settings.azure_speech_endpoint", "")
     resp = await client.get("/api/health")
     services = resp.json()["services"]
     assert services["whisper"] == "not_configured"

@@ -596,7 +596,7 @@ class TestVoxtralTranscribeService:
 
 
 # ---------------------------------------------------------------------------
-# Whisper Transcribe service — Azure OpenAI Whisper
+# Whisper Transcribe service — Azure Speech Batch (Whisper model)
 # ---------------------------------------------------------------------------
 
 
@@ -604,32 +604,121 @@ class TestWhisperTranscribeService:
 
     @pytest.fixture
     def mock_env(self, monkeypatch):
-        monkeypatch.setattr("backend.config.settings.azure_openai_api_key", "fake-key")
-        monkeypatch.setattr("backend.config.settings.azure_openai_endpoint", "https://fake.openai.azure.com/")
-        monkeypatch.setattr("backend.config.settings.azure_whisper_deployment_name", "whisper")
+        monkeypatch.setattr("backend.config.settings.azure_speech_key", "fake-key")
+        monkeypatch.setattr("backend.config.settings.azure_speech_region", "eastus")
+        monkeypatch.setattr("backend.config.settings.azure_speech_endpoint", "https://fake.speech.azure.com")
+        monkeypatch.setattr("backend.config.settings.azure_storage_connection_string", "DefaultEndpointsProtocol=https;AccountName=fake;AccountKey=ZmFrZQ==;EndpointSuffix=core.windows.net")
+        monkeypatch.setattr("backend.config.settings.azure_storage_container_name", "test-container")
+        monkeypatch.setattr("backend.config.settings.azure_whisper_model_id", "")
+
+    def _build_batch_mocks(self):
+        """Build aiohttp mock responses for the Whisper batch flow."""
+        # Model discovery response
+        model_resp = MagicMock()
+        model_resp.status = 200
+        model_resp.raise_for_status = MagicMock()
+        model_resp.json = AsyncMock(return_value={
+            "values": [
+                {
+                    "self": "https://eastus.api.cognitive.microsoft.com/speechtotext/models/base/whisper-001",
+                    "displayName": "Whisper Large V3",
+                    "createdDateTime": "2024-01-01T00:00:00Z",
+                },
+            ]
+        })
+        model_resp.__aenter__ = AsyncMock(return_value=model_resp)
+        model_resp.__aexit__ = AsyncMock(return_value=None)
+
+        # Create job response
+        create_resp = MagicMock()
+        create_resp.status = 201
+        create_resp.raise_for_status = MagicMock()
+        create_resp.json = AsyncMock(return_value={
+            "self": "https://fake.speech.azure.com/speechtotext/v3.2/transcriptions/abc123"
+        })
+        create_resp.__aenter__ = AsyncMock(return_value=create_resp)
+        create_resp.__aexit__ = AsyncMock(return_value=None)
+
+        # Poll response — succeeded
+        poll_resp = MagicMock()
+        poll_resp.status = 200
+        poll_resp.raise_for_status = MagicMock()
+        poll_resp.json = AsyncMock(return_value={"status": "Succeeded"})
+        poll_resp.__aenter__ = AsyncMock(return_value=poll_resp)
+        poll_resp.__aexit__ = AsyncMock(return_value=None)
+
+        # Files list response
+        files_resp = MagicMock()
+        files_resp.status = 200
+        files_resp.raise_for_status = MagicMock()
+        files_resp.json = AsyncMock(return_value={
+            "values": [
+                {
+                    "kind": "Transcription",
+                    "links": {"contentUrl": "https://blob.example.com/result.json?sas=token"},
+                }
+            ]
+        })
+        files_resp.__aenter__ = AsyncMock(return_value=files_resp)
+        files_resp.__aexit__ = AsyncMock(return_value=None)
+
+        # Result content response
+        content_resp = MagicMock()
+        content_resp.status = 200
+        content_resp.raise_for_status = MagicMock()
+        content_resp.json = AsyncMock(return_value={
+            "combinedRecognizedPhrases": [{"display": "Hello from Whisper.", "locale": "en-US"}],
+            "recognizedPhrases": [
+                {
+                    "offsetInTicks": 0,
+                    "durationInTicks": 18_000_000,
+                    "nBest": [{"display": "Hello from"}],
+                    "locale": "en-US",
+                },
+                {
+                    "offsetInTicks": 18_000_000,
+                    "durationInTicks": 17_000_000,
+                    "nBest": [{"display": "Whisper."}],
+                    "locale": "en-US",
+                },
+            ],
+        })
+        content_resp.__aenter__ = AsyncMock(return_value=content_resp)
+        content_resp.__aexit__ = AsyncMock(return_value=None)
+
+        return model_resp, create_resp, poll_resp, files_resp, content_resp
 
     async def test_transcribe_returns_segments(self, mock_env):
-        """Mocked openai SDK should produce segments with start/end times from verbose_json."""
+        """Batch flow should produce segments with correct timecodes."""
         try:
             from backend.services.whisper_transcribe import WhisperTranscribeService
         except ImportError:
             pytest.skip("WhisperTranscribeService not yet implemented")
 
-        mock_result = MagicMock()
-        mock_result.text = "Hello from Whisper."
-        mock_result.language = "en"
-        mock_result.segments = [
-            {"start": 0.0, "end": 1.8, "text": "Hello from"},
-            {"start": 1.8, "end": 3.5, "text": " Whisper."},
-        ]
+        model_resp, create_resp, poll_resp, files_resp, content_resp = self._build_batch_mocks()
 
-        mock_client = MagicMock()
-        mock_client.audio.transcriptions.create = AsyncMock(return_value=mock_result)
+        mock_session = MagicMock()
+        call_count = {"get": 0}
 
-        import io
-        fake_file = io.BytesIO(b"fake audio data")
-        with patch("backend.services.whisper_transcribe.AsyncAzureOpenAI", return_value=mock_client), \
-             patch("builtins.open", return_value=fake_file):
+        def _get_side_effect(url, **kwargs):
+            call_count["get"] += 1
+            if "models/base?" in url:
+                return model_resp
+            elif "/files" in url:
+                return files_resp
+            elif "blob.example.com" in url:
+                return content_resp
+            else:
+                return poll_resp
+
+        mock_session.get = MagicMock(side_effect=_get_side_effect)
+        mock_session.post = MagicMock(return_value=create_resp)
+        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session.__aexit__ = AsyncMock(return_value=None)
+
+        with patch("backend.services.azure_stt_batch.asyncio.to_thread", new_callable=AsyncMock) as mock_upload, \
+             patch("aiohttp.ClientSession", return_value=mock_session):
+            mock_upload.return_value = "https://blob.example.com/audio.wav?sas=token"
             svc = WhisperTranscribeService()
             result = await svc.transcribe("fake/path.wav", language="en-US")
 
@@ -640,57 +729,76 @@ class TestWhisperTranscribeService:
         assert result.segments[0].text == "Hello from"
         assert result.segments[1].start_time == 1.8
         assert result.segments[1].end_time == 3.5
-        assert result.detected_language == "en"
+        assert result.detected_language == "en-US"
 
-    async def test_language_passed_correctly(self, mock_env):
-        """Language 'en-US' should be split to ISO-639-1 'en' before SDK call."""
+    async def test_whisper_model_auto_discovery(self, mock_env):
+        """When azure_whisper_model_id is empty, service should auto-discover the model."""
         try:
             from backend.services.whisper_transcribe import WhisperTranscribeService
         except ImportError:
             pytest.skip("WhisperTranscribeService not yet implemented")
 
-        mock_result = MagicMock()
-        mock_result.text = "Test."
-        mock_result.language = "en"
-        mock_result.segments = []
+        model_resp, create_resp, poll_resp, files_resp, content_resp = self._build_batch_mocks()
 
-        mock_client = MagicMock()
-        mock_client.audio.transcriptions.create = AsyncMock(return_value=mock_result)
+        mock_session = MagicMock()
 
-        import io
-        fake_file = io.BytesIO(b"fake audio data")
-        with patch("backend.services.whisper_transcribe.AsyncAzureOpenAI", return_value=mock_client), \
-             patch("builtins.open", return_value=fake_file):
+        def _get_side_effect(url, **kwargs):
+            if "models/base?" in url:
+                return model_resp
+            elif "/files" in url:
+                return files_resp
+            elif "blob.example.com" in url:
+                return content_resp
+            else:
+                return poll_resp
+
+        mock_session.get = MagicMock(side_effect=_get_side_effect)
+        mock_session.post = MagicMock(return_value=create_resp)
+        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session.__aexit__ = AsyncMock(return_value=None)
+
+        with patch("backend.services.azure_stt_batch.asyncio.to_thread", new_callable=AsyncMock) as mock_upload, \
+             patch("aiohttp.ClientSession", return_value=mock_session):
+            mock_upload.return_value = "https://blob.example.com/audio.wav?sas=token"
             svc = WhisperTranscribeService()
-            await svc.transcribe("fake/path.wav", language="en-US")
+            result = await svc.transcribe("fake/path.wav", language=None)
 
-        call_kwargs = mock_client.audio.transcriptions.create.call_args
-        assert call_kwargs.kwargs.get("language") == "en" or \
-               (call_kwargs[1].get("language") == "en")
+        # Verify model discovery was called (GET to models/base)
+        get_calls = [str(c) for c in mock_session.get.call_args_list]
+        assert any("models/base?" in c for c in get_calls), "Should call models/base API for auto-discovery"
+        assert result.full_text  # Got a result
 
-    async def test_auth_failure(self, mock_env):
-        """AuthenticationError from openai SDK should propagate."""
+    async def test_batch_failure_raises(self, mock_env):
+        """Failed batch job should raise RuntimeError."""
         try:
             from backend.services.whisper_transcribe import WhisperTranscribeService
         except ImportError:
             pytest.skip("WhisperTranscribeService not yet implemented")
 
-        from openai import AuthenticationError
-        mock_client = MagicMock()
-        mock_client.audio.transcriptions.create = AsyncMock(
-            side_effect=AuthenticationError(
-                message="Invalid API key",
-                response=MagicMock(status_code=401),
-                body=None,
-            )
-        )
+        model_resp, create_resp, _, _, _ = self._build_batch_mocks()
 
-        import io
-        fake_file = io.BytesIO(b"fake audio data")
-        with patch("backend.services.whisper_transcribe.AsyncAzureOpenAI", return_value=mock_client), \
-             patch("builtins.open", return_value=fake_file):
+        # Override poll to return Failed
+        fail_resp = MagicMock()
+        fail_resp.status = 200
+        fail_resp.raise_for_status = MagicMock()
+        fail_resp.json = AsyncMock(return_value={
+            "status": "Failed",
+            "properties": {"error": {"message": "Model not available"}},
+        })
+        fail_resp.__aenter__ = AsyncMock(return_value=fail_resp)
+        fail_resp.__aexit__ = AsyncMock(return_value=None)
+
+        mock_session = MagicMock()
+        mock_session.get = MagicMock(side_effect=lambda url, **kw: model_resp if "models/base?" in url else fail_resp)
+        mock_session.post = MagicMock(return_value=create_resp)
+        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session.__aexit__ = AsyncMock(return_value=None)
+
+        with patch("backend.services.azure_stt_batch.asyncio.to_thread", new_callable=AsyncMock) as mock_upload, \
+             patch("aiohttp.ClientSession", return_value=mock_session):
+            mock_upload.return_value = "https://blob.example.com/audio.wav?sas=token"
             svc = WhisperTranscribeService()
-            with pytest.raises(Exception):
+            with pytest.raises(RuntimeError, match="Model not available"):
                 await svc.transcribe("fake/path.wav", language=None)
 
 
@@ -876,7 +984,7 @@ class TestCustomSettings:
         monkeypatch.setattr("backend.config.settings.azure_speech_endpoint", "https://fake.speech.azure.com")
         monkeypatch.setattr("backend.config.settings.azure_openai_api_key", "fake-key")
         monkeypatch.setattr("backend.config.settings.azure_openai_endpoint", "https://fake.openai.azure.com/")
-        monkeypatch.setattr("backend.config.settings.azure_whisper_deployment_name", "whisper")
+        monkeypatch.setattr("backend.config.settings.azure_whisper_model_id", "")
 
     async def test_fast_stt_phrase_list(self, mock_env):
         """phraseList should appear in definition when phrase_list setting is provided."""
@@ -915,32 +1023,93 @@ class TestCustomSettings:
         assert "profanityFilterMode" in definition
         assert definition["profanityFilterMode"] == "Masked"
 
-    async def test_whisper_prompt_and_temperature(self, mock_env):
-        """prompt and temperature should be forwarded to transcriptions.create() kwargs."""
+    async def test_whisper_word_timestamps_and_profanity(self, mock_env, monkeypatch):
+        """word_level_timestamps and profanity_filter should appear in the batch job body."""
         from backend.services.whisper_transcribe import WhisperTranscribeService
 
-        mock_result = MagicMock()
-        mock_result.text = "Hello."
-        mock_result.language = "en"
-        mock_result.segments = []
+        monkeypatch.setattr("backend.config.settings.azure_storage_connection_string", "DefaultEndpointsProtocol=https;AccountName=fake;AccountKey=ZmFrZQ==;EndpointSuffix=core.windows.net")
+        monkeypatch.setattr("backend.config.settings.azure_storage_container_name", "test-container")
 
-        mock_client = MagicMock()
-        mock_client.audio.transcriptions.create = AsyncMock(return_value=mock_result)
+        # Build mock responses
+        model_resp = MagicMock()
+        model_resp.status = 200
+        model_resp.raise_for_status = MagicMock()
+        model_resp.json = AsyncMock(return_value={
+            "values": [{
+                "self": "https://eastus.api.cognitive.microsoft.com/speechtotext/models/base/whisper-001",
+                "displayName": "Whisper Large V3",
+                "createdDateTime": "2024-01-01T00:00:00Z",
+            }]
+        })
+        model_resp.__aenter__ = AsyncMock(return_value=model_resp)
+        model_resp.__aexit__ = AsyncMock(return_value=None)
 
-        import io
-        fake_file = io.BytesIO(b"fake audio data")
-        with patch("backend.services.whisper_transcribe.AsyncAzureOpenAI", return_value=mock_client), \
-             patch("builtins.open", return_value=fake_file):
+        create_resp = MagicMock()
+        create_resp.status = 201
+        create_resp.raise_for_status = MagicMock()
+        create_resp.json = AsyncMock(return_value={
+            "self": "https://fake.speech.azure.com/speechtotext/v3.2/transcriptions/abc"
+        })
+        create_resp.__aenter__ = AsyncMock(return_value=create_resp)
+        create_resp.__aexit__ = AsyncMock(return_value=None)
+
+        poll_resp = MagicMock()
+        poll_resp.status = 200
+        poll_resp.raise_for_status = MagicMock()
+        poll_resp.json = AsyncMock(return_value={"status": "Succeeded"})
+        poll_resp.__aenter__ = AsyncMock(return_value=poll_resp)
+        poll_resp.__aexit__ = AsyncMock(return_value=None)
+
+        files_resp = MagicMock()
+        files_resp.status = 200
+        files_resp.raise_for_status = MagicMock()
+        files_resp.json = AsyncMock(return_value={
+            "values": [{"kind": "Transcription", "links": {"contentUrl": "https://blob.example.com/r.json?sas=t"}}]
+        })
+        files_resp.__aenter__ = AsyncMock(return_value=files_resp)
+        files_resp.__aexit__ = AsyncMock(return_value=None)
+
+        content_resp = MagicMock()
+        content_resp.status = 200
+        content_resp.raise_for_status = MagicMock()
+        content_resp.json = AsyncMock(return_value={
+            "combinedRecognizedPhrases": [{"display": "Hello."}],
+            "recognizedPhrases": [{"offsetInTicks": 0, "durationInTicks": 10_000_000, "nBest": [{"display": "Hello."}]}],
+        })
+        content_resp.__aenter__ = AsyncMock(return_value=content_resp)
+        content_resp.__aexit__ = AsyncMock(return_value=None)
+
+        mock_session = MagicMock()
+        captured_body = {}
+
+        def _post(url, *, json=None, **kwargs):
+            captured_body.update(json or {})
+            return create_resp
+
+        mock_session.get = MagicMock(side_effect=lambda url, **kw: (
+            model_resp if "models/base?" in url
+            else files_resp if "/files" in url
+            else content_resp if "blob.example.com" in url
+            else poll_resp
+        ))
+        mock_session.post = MagicMock(side_effect=_post)
+        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session.__aexit__ = AsyncMock(return_value=None)
+
+        with patch("backend.services.azure_stt_batch.asyncio.to_thread", new_callable=AsyncMock) as mock_upload, \
+             patch("aiohttp.ClientSession", return_value=mock_session):
+            mock_upload.return_value = "https://blob.example.com/audio.wav?sas=token"
             svc = WhisperTranscribeService()
             await svc.transcribe(
                 "fake/path.wav",
                 language="en-US",
-                settings={"prompt": "Technical terms", "temperature": 0.2},
+                settings={"word_level_timestamps": True, "profanity_filter": "Masked"},
             )
 
-        call_kwargs = mock_client.audio.transcriptions.create.call_args.kwargs
-        assert call_kwargs["prompt"] == "Technical terms"
-        assert call_kwargs["temperature"] == 0.2
+        # Verify the batch job body contains Whisper-specific properties
+        assert captured_body["properties"]["displayFormWordLevelTimestampsEnabled"] is True
+        assert captured_body["properties"]["profanityFilterMode"] == "Masked"
+        assert "model" in captured_body  # Whisper model reference
 
     async def test_llm_speech_prompt(self, mock_env):
         """enhancedMode.prompt should appear in definition when prompt setting provided."""
