@@ -14,6 +14,7 @@ The Whisper base-model URI is auto-discovered via the Models API when
 Auth: inherits from ``AzureSttBatchService`` (managed identity / key fallback).
 """
 
+import asyncio
 import logging
 import uuid
 
@@ -70,17 +71,25 @@ class WhisperTranscribeService(AzureSttBatchService):
             )
             return self._whisper_model_uri
 
-        # Auto-discover: list base models, find Whisper
-        url = f"{base}/speechtotext/models/base?api-version=2024-11-15&skip=0&top=200"
-        async with session.get(url, headers=self._headers()) as resp:
-            resp.raise_for_status()
-            data = await resp.json()
+        # Auto-discover: paginate through all base models to find Whisper
+        whisper_models: list[dict] = []
+        skip = 0
+        while True:
+            url = f"{base}/speechtotext/models/base?api-version=2024-11-15&skip={skip}&top=100"
+            async with session.get(url, headers=self._headers()) as resp:
+                resp.raise_for_status()
+                data = await resp.json()
+            models = data.get("values", [])
+            if not models:
+                break
+            for m in models:
+                if "whisper" in m.get("displayName", "").lower():
+                    whisper_models.append(m)
+            # Stop early once we've found Whisper models and passed them
+            if whisper_models and not any("whisper" in m.get("displayName", "").lower() for m in models):
+                break
+            skip += len(models)
 
-        whisper_models = [
-            m
-            for m in data.get("values", [])
-            if "whisper" in m.get("displayName", "").lower()
-        ]
         if not whisper_models:
             raise RuntimeError(
                 "No Whisper base model found in this Speech resource region"
@@ -147,8 +156,6 @@ class WhisperTranscribeService(AzureSttBatchService):
         language: str | None = None,
         settings: dict | None = None,
     ) -> TranscriptionResult:
-        import asyncio
-
         sas_url = await asyncio.to_thread(self._upload_to_blob, audio_path)
 
         async with aiohttp.ClientSession() as session:
