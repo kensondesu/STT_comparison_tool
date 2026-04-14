@@ -53,6 +53,9 @@ def _block_azure_credentials(monkeypatch):
         monkeypatch.setattr(config.settings, "azure_openai_api_key", "fake-test-key")
         monkeypatch.setattr(config.settings, "azure_openai_endpoint", "https://fake.openai.azure.com/")
         monkeypatch.setattr(config.settings, "azure_openai_deployment_name", "gpt-4o-transcribe")
+        monkeypatch.setattr(config.settings, "whisper_speech_key", "fake-test-key")
+        monkeypatch.setattr(config.settings, "whisper_speech_region", "eastus")
+        monkeypatch.setattr(config.settings, "whisper_speech_endpoint", "https://fake.whisper.azure.com")
         monkeypatch.setattr(config.settings, "voxtral_endpoint_key", "fake-test-key")
         monkeypatch.setattr(config.settings, "voxtral_endpoint_url", "https://fake.voxtral.endpoint/")
 

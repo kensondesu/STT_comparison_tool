@@ -604,9 +604,9 @@ class TestWhisperTranscribeService:
 
     @pytest.fixture
     def mock_env(self, monkeypatch):
-        monkeypatch.setattr("backend.config.settings.azure_speech_key", "fake-key")
-        monkeypatch.setattr("backend.config.settings.azure_speech_region", "eastus")
-        monkeypatch.setattr("backend.config.settings.azure_speech_endpoint", "https://fake.speech.azure.com")
+        monkeypatch.setattr("backend.config.settings.whisper_speech_key", "fake-key")
+        monkeypatch.setattr("backend.config.settings.whisper_speech_region", "eastus")
+        monkeypatch.setattr("backend.config.settings.whisper_speech_endpoint", "https://fake.speech.azure.com")
         monkeypatch.setattr("backend.config.settings.azure_storage_connection_string", "DefaultEndpointsProtocol=https;AccountName=fake;AccountKey=ZmFrZQ==;EndpointSuffix=core.windows.net")
         monkeypatch.setattr("backend.config.settings.azure_storage_container_name", "test-container")
         monkeypatch.setattr("backend.config.settings.azure_whisper_model_id", "")
@@ -617,15 +617,18 @@ class TestWhisperTranscribeService:
         model_resp = MagicMock()
         model_resp.status = 200
         model_resp.raise_for_status = MagicMock()
-        model_resp.json = AsyncMock(return_value={
-            "values": [
-                {
-                    "self": "https://eastus.api.cognitive.microsoft.com/speechtotext/models/base/whisper-001",
-                    "displayName": "Whisper Large V3",
-                    "createdDateTime": "2024-01-01T00:00:00Z",
-                },
-            ]
-        })
+        model_resp.json = AsyncMock(side_effect=[
+            {
+                "values": [
+                    {
+                        "self": "https://eastus.api.cognitive.microsoft.com/speechtotext/models/base/whisper-001",
+                        "displayName": "Whisper Large V3",
+                        "createdDateTime": "2024-01-01T00:00:00Z",
+                    },
+                ]
+            },
+            {"values": []},
+        ])
         model_resp.__aenter__ = AsyncMock(return_value=model_resp)
         model_resp.__aexit__ = AsyncMock(return_value=None)
 
@@ -716,7 +719,8 @@ class TestWhisperTranscribeService:
         mock_session.__aenter__ = AsyncMock(return_value=mock_session)
         mock_session.__aexit__ = AsyncMock(return_value=None)
 
-        with patch("backend.services.azure_stt_batch.asyncio.to_thread", new_callable=AsyncMock) as mock_upload, \
+        with patch("backend.services.whisper_transcribe.asyncio.to_thread", new_callable=AsyncMock) as mock_upload, \
+             patch("backend.services.azure_stt_batch.asyncio.sleep", new_callable=AsyncMock), \
              patch("aiohttp.ClientSession", return_value=mock_session):
             mock_upload.return_value = "https://blob.example.com/audio.wav?sas=token"
             svc = WhisperTranscribeService()
@@ -757,7 +761,8 @@ class TestWhisperTranscribeService:
         mock_session.__aenter__ = AsyncMock(return_value=mock_session)
         mock_session.__aexit__ = AsyncMock(return_value=None)
 
-        with patch("backend.services.azure_stt_batch.asyncio.to_thread", new_callable=AsyncMock) as mock_upload, \
+        with patch("backend.services.whisper_transcribe.asyncio.to_thread", new_callable=AsyncMock) as mock_upload, \
+             patch("backend.services.azure_stt_batch.asyncio.sleep", new_callable=AsyncMock), \
              patch("aiohttp.ClientSession", return_value=mock_session):
             mock_upload.return_value = "https://blob.example.com/audio.wav?sas=token"
             svc = WhisperTranscribeService()
@@ -794,7 +799,8 @@ class TestWhisperTranscribeService:
         mock_session.__aenter__ = AsyncMock(return_value=mock_session)
         mock_session.__aexit__ = AsyncMock(return_value=None)
 
-        with patch("backend.services.azure_stt_batch.asyncio.to_thread", new_callable=AsyncMock) as mock_upload, \
+        with patch("backend.services.whisper_transcribe.asyncio.to_thread", new_callable=AsyncMock) as mock_upload, \
+             patch("backend.services.azure_stt_batch.asyncio.sleep", new_callable=AsyncMock), \
              patch("aiohttp.ClientSession", return_value=mock_session):
             mock_upload.return_value = "https://blob.example.com/audio.wav?sas=token"
             svc = WhisperTranscribeService()
@@ -985,6 +991,9 @@ class TestCustomSettings:
         monkeypatch.setattr("backend.config.settings.azure_openai_api_key", "fake-key")
         monkeypatch.setattr("backend.config.settings.azure_openai_endpoint", "https://fake.openai.azure.com/")
         monkeypatch.setattr("backend.config.settings.azure_whisper_model_id", "")
+        monkeypatch.setattr("backend.config.settings.whisper_speech_key", "fake-key")
+        monkeypatch.setattr("backend.config.settings.whisper_speech_region", "eastus")
+        monkeypatch.setattr("backend.config.settings.whisper_speech_endpoint", "https://fake.speech.azure.com")
 
     async def test_fast_stt_phrase_list(self, mock_env):
         """phraseList should appear in definition when phrase_list setting is provided."""
@@ -1034,13 +1043,14 @@ class TestCustomSettings:
         model_resp = MagicMock()
         model_resp.status = 200
         model_resp.raise_for_status = MagicMock()
-        model_resp.json = AsyncMock(return_value={
-            "values": [{
+        model_resp.json = AsyncMock(side_effect=[
+            {"values": [{
                 "self": "https://eastus.api.cognitive.microsoft.com/speechtotext/models/base/whisper-001",
                 "displayName": "Whisper Large V3",
                 "createdDateTime": "2024-01-01T00:00:00Z",
-            }]
-        })
+            }]},
+            {"values": []},
+        ])
         model_resp.__aenter__ = AsyncMock(return_value=model_resp)
         model_resp.__aexit__ = AsyncMock(return_value=None)
 
@@ -1096,7 +1106,8 @@ class TestCustomSettings:
         mock_session.__aenter__ = AsyncMock(return_value=mock_session)
         mock_session.__aexit__ = AsyncMock(return_value=None)
 
-        with patch("backend.services.azure_stt_batch.asyncio.to_thread", new_callable=AsyncMock) as mock_upload, \
+        with patch("backend.services.whisper_transcribe.asyncio.to_thread", new_callable=AsyncMock) as mock_upload, \
+             patch("backend.services.azure_stt_batch.asyncio.sleep", new_callable=AsyncMock), \
              patch("aiohttp.ClientSession", return_value=mock_session):
             mock_upload.return_value = "https://blob.example.com/audio.wav?sas=token"
             svc = WhisperTranscribeService()
