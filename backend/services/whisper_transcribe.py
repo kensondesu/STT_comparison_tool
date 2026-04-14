@@ -28,10 +28,23 @@ logger = logging.getLogger(__name__)
 
 
 class WhisperTranscribeService(AzureSttBatchService):
-    """Whisper via Azure STT Batch Transcription."""
+    """Whisper via Azure STT Batch Transcription (separate region from main STT)."""
 
     def __init__(self) -> None:
-        super().__init__()
+        # Do NOT call super().__init__() — we override all config
+        # to use the Whisper-specific Speech resource
+        self._region = app_settings.whisper_speech_region
+        base = (
+            app_settings.whisper_speech_endpoint.rstrip("/")
+            if app_settings.whisper_speech_endpoint
+            else f"https://{self._region}.api.cognitive.microsoft.com"
+        )
+        self._base_url = f"{base}/speechtotext/v3.2/transcriptions"
+        self._container = app_settings.azure_storage_container_name
+        self._use_key = bool(app_settings.whisper_speech_key)
+        self._key = app_settings.whisper_speech_key
+        self._conn_str = app_settings.azure_storage_connection_string
+        self._account_name = app_settings.azure_storage_account_name
         self._whisper_model_uri: str | None = None
 
     # ------------------------------------------------------------------
@@ -44,8 +57,8 @@ class WhisperTranscribeService(AzureSttBatchService):
             return self._whisper_model_uri
 
         base = (
-            app_settings.azure_speech_endpoint.rstrip("/")
-            if app_settings.azure_speech_endpoint
+            app_settings.whisper_speech_endpoint.rstrip("/")
+            if app_settings.whisper_speech_endpoint
             else f"https://{self._region}.api.cognitive.microsoft.com"
         )
 

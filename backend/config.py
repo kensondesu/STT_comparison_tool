@@ -26,6 +26,11 @@ class Settings(BaseSettings):
     mai_speech_region: str = "eastus"
     mai_speech_endpoint: str = ""       # e.g. "https://foundry-mai-transcribe.cognitiveservices.azure.com/"
 
+    # Whisper (separate resource/region — Whisper batch not available in all regions)
+    whisper_speech_key: str = ""        # optional fallback
+    whisper_speech_region: str = "eastus"
+    whisper_speech_endpoint: str = ""   # e.g. "https://my-whisper-resource.cognitiveservices.azure.com/"
+
     # Azure Blob Storage (Batch only)
     azure_storage_account_name: str = ""  # e.g. "mystorageaccount"
     azure_storage_connection_string: str = ""  # optional fallback

@@ -72,6 +72,9 @@ async def test_health_unconfigured_without_env(client, monkeypatch):
     monkeypatch.setattr("backend.config.settings.mai_speech_key", "")
     monkeypatch.setattr("backend.config.settings.mai_speech_region", "")
     monkeypatch.setattr("backend.config.settings.mai_speech_endpoint", "")
+    monkeypatch.setattr("backend.config.settings.whisper_speech_key", "")
+    monkeypatch.setattr("backend.config.settings.whisper_speech_region", "")
+    monkeypatch.setattr("backend.config.settings.whisper_speech_endpoint", "")
     monkeypatch.setattr("backend.config.settings.azure_openai_api_key", "")
     monkeypatch.setattr("backend.config.settings.azure_openai_endpoint", "")
     monkeypatch.setattr("backend.config.settings.voxtral_endpoint_url", "")
@@ -115,8 +118,8 @@ async def test_health_whisper_configured_when_endpoint_set(client, monkeypatch):
 
 async def test_health_whisper_not_configured_when_empty(client, monkeypatch):
     """Whisper should be 'not_configured' when speech key and endpoint are empty."""
-    monkeypatch.setattr("backend.config.settings.azure_speech_key", "")
-    monkeypatch.setattr("backend.config.settings.azure_speech_endpoint", "")
+    monkeypatch.setattr("backend.config.settings.whisper_speech_key", "")
+    monkeypatch.setattr("backend.config.settings.whisper_speech_endpoint", "")
     resp = await client.get("/api/health")
     services = resp.json()["services"]
     assert services["whisper"] == "not_configured"
