@@ -5,7 +5,7 @@ A web app that compares 7 Azure transcription engines side-by-side with timecode
 ## Features
 
 - **7 Transcription Methods**: Azure STT Batch, STT Fast, MAI-Transcribe-1, GPT-4o-transcribe, Whisper, LLM Speech, Voxtral Mini
-- **Multi-Format Audio Upload**: .wav, .mp3, .flac, .ogg, .m4a, .webm
+- **Multi-Format Audio Upload**: .wav, .mp3, .flac, .ogg, .m4a, .webm — with automatic ffmpeg conversion for incompatible containers
 - **Timecoded Transcript Visualization**: Built with [wavesurfer.js](https://wavesurfer.xyz/) for interactive waveform display
 - **Click-to-Seek Navigation**: Click any segment to jump audio to that exact timestamp
 - **Per-Model Settings**: Configure phrase lists, diarization, profanity filtering, prompt, temperature, and more
@@ -28,6 +28,7 @@ A web app that compares 7 Azure transcription engines side-by-side with timecode
 
 - Python 3.11+
 - [uv](https://docs.astral.sh/uv/) (fast Python package manager)
+- [ffmpeg](https://ffmpeg.org/) (for audio format conversion)
 - [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) + `az login`
 
 ### Setup
@@ -79,7 +80,7 @@ See `infra/README.md` for full deployment guide, environment variables, and trou
 uv run pytest
 ```
 
-Runs 91 tests covering API routes, transcription services, and audio validation.
+Runs 98 tests covering API routes, transcription services, audio validation, and ffmpeg preprocessing.
 
 ## Architecture
 
@@ -108,7 +109,7 @@ MAI_transcribe/
 │   ├── index.html           # Single-page app
 │   ├── css/style.css        # Styles
 │   └── js/                  # app.js, api.js, player.js
-├── tests/                   # 91 tests
+├── tests/                   # 98 tests
 ├── infra/                   # Bicep templates & deploy script
 ├── Dockerfile               # Container image
 ├── pyproject.toml           # Python project config
