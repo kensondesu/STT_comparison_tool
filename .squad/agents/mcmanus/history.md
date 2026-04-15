@@ -149,3 +149,19 @@
 - **Whisper batch differences from standard STT Batch**: Uses `displayFormWordLevelTimestampsEnabled` (not `wordLevelTimestampsEnabled`), no `punctuationMode`, lexical field is empty (use `display` from nBest), requires `"model": {"self": "<uri>"}` in job body.
 - **Model auto-discovery via base models API**: `GET /speechtotext/models/base?api-version=2024-11-15` returns all base models; filter by displayName containing "whisper". Sorting by `createdDateTime` picks the newest version.
 - **Test mock complexity for batch flow**: Batch tests require 5 mock responses (model discovery, job create, poll, files list, content fetch) with proper async context managers — helper methods keep tests manageable.
+
+## ffmpeg Audio Preprocessing — 2026-04-15
+
+### What Changed
+- Added `ensure_compatible_format()` async function in `backend/utils/audio.py` — probes with ffprobe, converts incompatible formats (e.g. m4a) to 16kHz mono PCM WAV via ffmpeg
+- Added `ffmpeg_path` and `ffprobe_path` settings to `backend/config.py` (default: system PATH)
+- Integrated preprocessing into `backend/routers/upload.py` — runs after `save_file()`, before `get_duration()`, updates `ext` and `format` in response
+- Added `ffmpeg` installation to Dockerfile production stage
+- Added `_mock_ffprobe` autouse fixture in `tests/conftest.py` — bypasses ffprobe/ffmpeg for test stubs that aren't real audio
+
+### Learnings
+- **Patch target matters for `from X import Y`**: When `upload.py` does `from backend.utils.audio import ensure_compatible_format`, monkeypatching the function on `backend.utils.audio` doesn't affect the already-bound name in `upload.py`. Must patch on `backend.routers.upload` instead.
+- **ffprobe format_name is comma-delimited**: e.g. `"matroska,webm"` or `"mov,mp4,m4a,3gp,3g2,mj2"`. Substring match against `_COMPATIBLE_FORMATS` handles this correctly.
+- **Graceful degradation**: If ffprobe/ffmpeg is not installed, `ensure_compatible_format` catches `FileNotFoundError` and returns the original path with a warning — no crash.
+- **`find_file()` already extension-agnostic**: Searches by stem, so `.m4a` → `.wav` conversion doesn't break file lookups.
+- All 91 tests pass (21 skipped) after changes.

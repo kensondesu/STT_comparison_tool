@@ -8,7 +8,7 @@ from fastapi.responses import FileResponse
 
 from backend.config import settings
 from backend.models.schemas import UploadResponse
-from backend.utils.audio import validate_extension, validate_header, get_duration
+from backend.utils.audio import validate_extension, validate_header, get_duration, ensure_compatible_format
 from backend.utils.storage import save_file, find_file, get_mime_type
 
 router = APIRouter(prefix="/api", tags=["upload"])
@@ -41,6 +41,10 @@ async def upload_audio(file: UploadFile = File(...)):
 
     file_id = str(uuid.uuid4())
     path = save_file(file_id, ext, data)
+
+    # Convert to compatible format if needed (e.g. m4a → wav)
+    path = await ensure_compatible_format(path)
+    ext = path.suffix.lstrip(".").lower()  # may have changed from conversion
 
     duration = get_duration(path)
 

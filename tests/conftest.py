@@ -73,6 +73,22 @@ def _block_azure_credentials(monkeypatch):
     except ImportError:
         pass
 
+
+@pytest.fixture(autouse=True)
+def _mock_ffprobe(monkeypatch):
+    """Bypass ffmpeg/ffprobe in tests — stub files are not real audio.
+
+    Makes ensure_compatible_format a passthrough that returns the path unchanged.
+    """
+    async def _passthrough(file_path):
+        return file_path
+
+    try:
+        import backend.routers.upload as _upload_mod
+        monkeypatch.setattr(_upload_mod, "ensure_compatible_format", _passthrough)
+    except ImportError:
+        pass
+
 # ---------------------------------------------------------------------------
 # Schema stubs — used ONLY until the real backend models exist.
 # These mirror the contract in ARCHITECTURE.md so tests can reference the

@@ -46,6 +46,10 @@ class Settings(BaseSettings):
     voxtral_endpoint_url: str = ""
     voxtral_endpoint_key: str = ""      # optional fallback
 
+    # ffmpeg / ffprobe (audio preprocessing)
+    ffmpeg_path: str = "ffmpeg"
+    ffprobe_path: str = "ffprobe"
+
     # App settings
     upload_dir: Path = Path(__file__).resolve().parent.parent / "uploads"
     max_file_size_bytes: int = 300 * 1024 * 1024  # 300 MB
