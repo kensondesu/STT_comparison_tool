@@ -3,6 +3,12 @@
 import logging
 from pathlib import Path
 
+# --- First-time setup: create .env if missing ---
+from backend.setup_wizard import env_exists, run_setup_wizard
+if not env_exists():
+    run_setup_wizard()
+
+# Now safe to import config (it will read the .env we just created)
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles

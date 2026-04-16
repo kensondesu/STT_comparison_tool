@@ -165,3 +165,18 @@
 - **Graceful degradation**: If ffprobe/ffmpeg is not installed, `ensure_compatible_format` catches `FileNotFoundError` and returns the original path with a warning — no crash.
 - **`find_file()` already extension-agnostic**: Searches by stem, so `.m4a` → `.wav` conversion doesn't break file lookups.
 - All 91 tests pass (21 skipped) after changes.
+
+## First-Time Setup Wizard — 2026-04-15
+
+### What Changed
+- Created `backend/setup_wizard.py` — interactive CLI wizard that prompts for all Azure service config and writes `.env`
+- Modified `backend/main.py` — wizard check runs BEFORE `from backend.config import settings` so the freshly written `.env` is read at import time
+- Wizard includes auth mode toggle: Managed Identity (DefaultAzureCredential) vs API key based
+- Covers all services: Azure Speech, MAI-Transcribe-1, Whisper, Blob Storage, Azure OpenAI, Voxtral
+- Auto-skip in non-interactive contexts: `sys.stdin.isatty()` returns False (pytest, Docker, CI), or `AZURE_SPEECH_ENDPOINT` / `SKIP_SETUP_WIZARD` env vars are set
+
+### Learnings
+- **Import order is critical**: `backend/config.py` reads `.env` at module load time via pydantic-settings `model_config`. The wizard must execute before `from backend.config import settings` — otherwise the Settings singleton is created without the `.env` values.
+- **isatty() guard is essential for tests**: pytest runs with stdin redirected (not a tty), so the `sys.stdin.isatty()` check prevents the wizard from ever triggering during test runs — no test changes needed.
+- **Skip via env var for containers**: Docker / Container Apps inject env vars directly; `SKIP_SETUP_WIZARD` or an existing `AZURE_SPEECH_ENDPOINT` bypasses the wizard even without a `.env` file.
+- All 98 tests pass (21 skipped) after changes — zero regressions.
